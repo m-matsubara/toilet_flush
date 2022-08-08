@@ -1,8 +1,12 @@
 /**
- * Toilet flush   Copyright © 2022 m.matsubara
+ * Toilet flush (for Lixil)  Copyright © 2022 m.matsubara
  * 
  * ## 概要
- *   距離センサーを用いてトイレの着座と離席を判断し、離席後一定時間たったら（タンクの水がたまる時間待つ）トイレを流す。
+ *   加速度センサーを用いてトイレの着座と離席を判断し、離席後一定時間たったら（タンクの水がたまる時間待つ）トイレを流す。
+ *   
+ * ## 必要機材
+ *   M5StickC Plus
+ *   M5Stack用赤外線送受信ユニット [U002]
  * 
  * ## 参考
  *   M5StickC(ESP32)で赤外線リモコンを作ろう
@@ -24,7 +28,6 @@
  *   https://lang-ship.com/blog/work/m5stickc-power-saving/
  *
  * ## ライブラリ
- *   
  *   M5StickCPlus      0.0.8  : M5Stack
  *   IRremoteESP8266   2.8.2  : David Conran, Mark Szabo, Sebastien Warin, Roi Dayan, Massimiliano Pinto, Christian Nilsson
  *   VL53L0X           1.3.1  : pololu
@@ -67,7 +70,7 @@ void initDisplay() {
   //M5.Lcd.setRotation(3);
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(5, 0, 2);
-  M5.Lcd.println("Lixil flush v1.0");
+  M5.Lcd.println("Toilet flush v0.3");
 }
 
 /**
