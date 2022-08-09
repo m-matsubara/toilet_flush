@@ -50,7 +50,7 @@
 const uint16_t IR_LED = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
 
 // 定数
-const int SITDOWN_TIMER   = 120000; // 長時間着座タイマー
+const int SITDOWN_TIMER   = 60000; // 長時間着座タイマー
 const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
 //const int SITDOWN_TIMER   = 12000; // 長時間着座タイマー
 //const int COUNTDOWN_TIMER = 12000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
@@ -62,6 +62,11 @@ unsigned long timeValue = 0;
 
 // 赤外線送信クラス
 IRsend irsend(IR_LED);  // Set the GPIO to be used to sending the message.
+
+// 距離計(ToFセンサー)
+VL53L0X rangefinder;
+// 距離計(ToFセンサー)を利用するか
+boolean rangefinderUseFlag = false;
 
 // 画面利用フラグ
 boolean lcdUseFlag = false; // デフォルト消灯
@@ -130,6 +135,17 @@ void setup() {
   // 赤外線LEDの初期化
   irsend.begin();
 
+  // 距離計の初期化
+  Wire.begin(0, 26, 100000UL); // I2C of HAT Connection
+  rangefinder.setTimeout(500);
+  if (rangefinder.init()) {
+    rangefinderUseFlag = true;
+    rangefinder.startContinuous();
+    Serial.println("use rangefinder.");
+  } else {
+    Serial.println("unuse rangefinder.");
+  }
+
   // 6軸センサ初期化
   M5.Imu.Init();
   
@@ -139,25 +155,6 @@ void setup() {
 
 void loop() {
   M5.update();
-
-  // ボタン処理
-  if (M5.BtnA.wasReleased()) {
-    // M5 ボタンが押されたらディスプレイ点灯・トイレフラッシュ・トイレフラッシュキャンセル
-    if (lcdUseFlag == false) {
-      displayOn();
-    } else if (status != 4) {
-      status = 4; // 手動カウントダウン 
-      timeValue = millis();
-      displayOn();
-    } else {
-      status = 0; // 強制的に待機モードに変更
-      displayOff();
-    }
-  }
-  if (M5.BtnB.wasReleased()) {
-    // 画面向かって右側のボタンが押されたら、LCD ON/OFF トグル
-    displayToggle();
-  }
 
   // 加速度取得
   float accX = 0;
@@ -169,6 +166,43 @@ void loop() {
   //sitOnFlg = digitalRead(PIR_IO);
   //sitOnFlg = (analogRead(PIR_IO) > 2000);
   boolean sitOnFlg = (accY < 0.5);  // LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0
+
+  // ボタン値取得
+  boolean btnA = M5.BtnA.wasReleased();
+  boolean btnB = M5.BtnB.wasReleased();
+  // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
+  if (rangefinderUseFlag) {
+    uint16_t distance = rangefinder.readRangeContinuousMillimeters();
+    //Serial.print("distance: ");
+    //Serial.println(distance);
+    if ((accY > 0.75) && (distance <= 200)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
+      btnA = true;
+      do {
+        distance = rangefinder.readRangeContinuousMillimeters();
+        //Serial.print("distance: ");
+        //Serial.println(distance);
+        delay(30);
+      } while (distance < 250);
+    }
+  }
+  // ボタン処理
+  if (btnA) {
+    // A ボタンが押されたらディスプレイ点灯・トイレフラッシュ・トイレフラッシュキャンセル
+    if (lcdUseFlag == false) {
+      displayOn();
+    } else if (status != 4) {
+      status = 4; // 手動カウントダウン 
+      timeValue = millis();
+      displayOn();
+    } else {
+      status = 0; // 強制的に待機モードに変更
+      displayOff();
+    }
+  }
+  if (btnB) {
+    // B ボタンが押されたら、LCD ON/OFF トグル
+    displayToggle();
+  }
 
   // 判定処理
   switch (status) {
@@ -246,5 +280,5 @@ void loop() {
   M5.Lcd.setCursor(5, 208, 2);
   M5.Lcd.printf("Acc:\n  %.2f %.2f %.2f   ", accX, accY, accZ);
 
-  delay(50);
+  delay(30);
 }
