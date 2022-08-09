@@ -4,13 +4,14 @@
  * ## 概要
  *   配管上の問題でトイレ詰まりをよく起こすトイレにおいて、使用後に念入りに流すため、離席後一定時間たったら（離席時に流すが、タンクに水がたまるのを待つ）、再度タイマーでトイレを流す（大）。
  *   
- * ## 対象機材
- * * INAXシャワートイレ (プレアス DT-CL114A・CH184A用リモコンで確認)  
+ * ## 対象機材（トイレ）
+ * * リモコンで流す動作可能なINAXシャワートイレ (プレアス DT-CL114A・CH184A用リモコンで確認)
  *   (リモコンのコマンドが異なる場合、送信コマンドを赤外線センサで解析する必要があります。)
  *
- * ## 必要機材
+ * ## 必要機材（このプログラムを動作させるのに使用する機材）
  * * M5StickC Plus
  * * M5Stack用赤外線送受信ユニット [U002] (本体の赤外線LEDが使える場合は不要・送信コマンドを赤外線センサで解析する必要がある場合は必要)
+ * * M5StickC ToF Hat（必須ではない。使用した場合は、M5ボタンの代わりに距離センサーで操作可能)
  * 
  * ## 参考
  *   M5StickC(ESP32)で赤外線リモコンを作ろう
@@ -55,6 +56,9 @@ const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（�
 //const int SITDOWN_TIMER   = 12000; // 長時間着座タイマー
 //const int COUNTDOWN_TIMER = 12000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
 
+// 処理ごとの待ち時間(ms)
+const int DELAY_TIME = 30;
+
 // ステータス
 int status = 0; // 0:待機中, 1:着座確認（長時間着座待ち）, 2:長時間着座(離席待ち) 3:カウントダウン, 4:手動カウントダウン
 // 一部のステータスで使用するステータスが変更された時刻
@@ -63,7 +67,7 @@ unsigned long timeValue = 0;
 // 赤外線送信クラス
 IRsend irsend(IR_LED);  // Set the GPIO to be used to sending the message.
 
-// 距離計(ToFセンサー)
+// 距離計(ToFセンサー)・任意
 VL53L0X rangefinder;
 // 距離計(ToFセンサー)を利用するか
 boolean rangefinderUseFlag = false;
@@ -181,7 +185,7 @@ void loop() {
         distance = rangefinder.readRangeContinuousMillimeters();
         //Serial.print("distance: ");
         //Serial.println(distance);
-        delay(30);
+        delay(DELAY_TIME);
       } while (distance < 250);
     }
   }
@@ -280,5 +284,5 @@ void loop() {
   M5.Lcd.setCursor(5, 208, 2);
   M5.Lcd.printf("Acc:\n  %.2f %.2f %.2f   ", accX, accY, accZ);
 
-  delay(30);
+  delay(DELAY_TIME);
 }
