@@ -46,34 +46,61 @@
 #include <VL53L0X.h>
 #include <Wire.h>
 
+// デバッグの時定義
+//#define DEBUG
+
 // 赤外線LED接続端子定数
-// const uint16_t IR_LED = 9;  // 内蔵赤外線 LED
-const uint16_t IR_LED = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
+const uint16_t IR_LED = 9;  // 内蔵赤外線 LED
+//const uint16_t IR_LED = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
+
+// PIR HAT 接続端子定数
+const uint16_t PIR = 36;  // 人感センサー
 
 // 定数
-const int SITDOWN_TIMER   = 60000; // 長時間着座タイマー
+#ifdef DEBUG
+const int SITDOWN_TIMER   = 6000; // 長時間着座タイマー(ms)
+const int COUNTDOWN_TIMER = 12000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
+#else
+const int SITDOWN_TIMER   = 60000; // 長時間着座タイマー(ms)
 const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
-//const int SITDOWN_TIMER   = 12000; // 長時間着座タイマー
-//const int COUNTDOWN_TIMER = 12000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
+#endif
+
+const int DISPLAY_ON_TIMER = COUNTDOWN_TIMER; // 人感センサー検知後のディスプレイ点灯時間(ms)
+
 
 // 処理ごとの待ち時間(ms)
 const int DELAY_TIME = 30;
 
 // ステータス
-int status = 0; // 0:待機中, 1:着座確認（長時間着座待ち）, 2:長時間着座(離席待ち) 3:カウントダウン, 4:手動カウントダウン
+enum class Status { Waiting, SitOn, SitOnLong, Countdown, ManualCountdown };
+Status status = Status::Waiting;
 // 一部のステータスで使用するステータスが変更された時刻
-unsigned long timeValue = 0;
+unsigned long timeChangeStatus = 0;
+
+// ディスプレイを点灯した時刻
+unsigned long timeDisplayOn = 0;
 
 // 赤外線送信クラス
 IRsend irsend(IR_LED);  // Set the GPIO to be used to sending the message.
 
-// 距離計(ToFセンサー)・任意
+// 距離計(ToFセンサー)
 VL53L0X rangefinder;
 // 距離計(ToFセンサー)を利用するか
 boolean rangefinderUseFlag = false;
 
+// 人感センサー(PIR HAT)
+boolean pirUseFlag = false;
+
 // 画面利用フラグ
 boolean lcdUseFlag = false; // デフォルト消灯
+
+// ステータス変更
+void changeStatus(Status newStatus) {
+  status = newStatus;
+  timeChangeStatus = millis();
+  if (status != Status::Waiting)
+    displayOn();
+}
 
 /**
  * 画面初期化
@@ -92,6 +119,7 @@ void initDisplay() {
 void displayOn() {
   lcdUseFlag = true;
   M5.Axp.SetLDO2(lcdUseFlag);
+  timeDisplayOn = millis();
 }
 
 /**
@@ -106,7 +134,7 @@ void displayOff() {
  * ディスプレイON/OFFトグル
  */
 void displayToggle() {
-  lcdUseFlag = false;
+  lcdUseFlag = !lcdUseFlag;
   M5.Axp.SetLDO2(lcdUseFlag);
 }
 
@@ -114,7 +142,8 @@ void displayToggle() {
  * トイレフラッシュ（大）関数(INAX)
  */
 void flush() {
-  // CPU の速度を240Mhz に戻さないと赤外線が送れない
+  displayOn();
+  // CPU の速度が10Mhzのままだと赤外線が送れない
   setCpuFrequencyMhz(240);
   M5.Lcd.fillScreen(BLUE);
   irsend.sendInax(0x5C30CF);
@@ -147,7 +176,11 @@ void setup() {
     rangefinder.startContinuous();
     Serial.println("use rangefinder.");
   } else {
+    // 距離計が初期化できない場合、人感センサーを利用する。（接続確認はできない）
+    pinMode(36, INPUT_PULLDOWN);
+    pirUseFlag = true;
     Serial.println("unuse rangefinder.");
+    Serial.println("use PIR HAT.");
   }
 
   // 6軸センサ初期化
@@ -189,63 +222,75 @@ void loop() {
       } while (distance < 250);
     }
   }
+
+  // 人感センサによるディスプレイON判定
+  if (pirUseFlag) {
+    if (digitalRead(PIR)) {
+      displayOn();      
+    }
+  }
+
+  // ディスプレイ消灯判定
+  if (lcdUseFlag) {
+    if (millis() - timeDisplayOn > DISPLAY_ON_TIMER) {
+      displayOff();
+    }
+  }
+  
   // ボタン処理
   if (btnA) {
     // A ボタンが押されたらディスプレイ点灯・トイレフラッシュ・トイレフラッシュキャンセル
     if (lcdUseFlag == false) {
       displayOn();
-    } else if (status != 4) {
-      status = 4; // 手動カウントダウン 
-      timeValue = millis();
-      displayOn();
+    } else if (status != Status::Countdown && status != Status::ManualCountdown) {
+      changeStatus(Status::ManualCountdown); // 手動カウントダウン 
     } else {
-      status = 0; // 強制的に待機モードに変更
+      changeStatus(Status::Waiting); // 強制的に待機モードに変更
       displayOff();
     }
   }
   if (btnB) {
-    // B ボタンが押されたら、LCD ON/OFF トグル
-    displayToggle();
+    // B ボタンが押されたら、即時トイレフラッシュ
+    displayOn();
+    flush();
+    changeStatus(Status::Waiting);
+  }
+  if (M5.Axp.GetBtnPress() != 0) {
+    // 電源ボタンを押すと（6秒未満）リセット
+    esp_restart();
   }
 
-  // 判定処理
+  // ステータス判定処理
   switch (status) {
-  case 0:   // 待機中 
+  case Status::Waiting:   // 待機中 
     if (sitOnFlg) {
-      status = 1; // 着座した
-      timeValue = millis();
+      changeStatus(Status::SitOn); // 着座した
     }
     break;
-  case 1:   // 着座確認（長時間着座待ち）
+  case Status::SitOn:   // 着座確認（長時間着座待ち）
     if (sitOnFlg == false) {
-      status = 0;
-    } else if (millis() - timeValue >= SITDOWN_TIMER) {
-      status = 2;
-      timeValue = millis();
+      changeStatus(Status::Waiting);
+    } else if (millis() - timeChangeStatus >= SITDOWN_TIMER) {
+      changeStatus(Status::SitOnLong);
     }
     break;
-  case 2:   // 長時間着座(離席待ち)
+  case Status::SitOnLong:   // 長時間着座(離席待ち)
     if (sitOnFlg == false) {
-      status = 3; // 離席した…カウントダウン
-      timeValue = millis();
-      displayOn();
+      changeStatus(Status::Countdown); // 離席した…カウントダウン
     }
     break;
-  case 3:   // カウントダウン
+  case Status::Countdown:   // カウントダウン
     if (sitOnFlg) {
-      status = 2; // 着座した(長時間着座(離席待ち)に戻る)
-    } else if (millis() - timeValue >= COUNTDOWN_TIMER) {
+      changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
+    } else if (millis() - timeChangeStatus >= COUNTDOWN_TIMER) {
       flush();
-      status = 0;
-      displayOff();
+      changeStatus(Status::Waiting);
     }
     break;
-  case 4:   // 手動カウントダウン
-    if (millis() - timeValue >= COUNTDOWN_TIMER) {
+  case Status::ManualCountdown:   // 手動カウントダウン
+    if (millis() - timeChangeStatus >= COUNTDOWN_TIMER) {
       flush();
-      status = 0;
-      lcdUseFlag = false;
-      M5.Axp.SetLDO2(lcdUseFlag);
+      changeStatus(Status::Waiting);
     }
     break;
   }
@@ -253,26 +298,26 @@ void loop() {
   // ステータスの表示
   M5.Lcd.setCursor(5, 30, 4);
   switch (status) {
-  case 0:   // 待機中 
+  case Status::Waiting:   // 待機中 
     M5.Lcd.print("Waiting      ");
     break;
-  case 1:   // 着座確認（長時間着座待ち）
+  case Status::SitOn:   // 着座確認（長時間着座待ち）
     M5.Lcd.print("Sit on       ");
     break;
-  case 2:   // 長時間着座(離席待ち)
+  case Status::SitOnLong:   // 長時間着座(離席待ち)
     M5.Lcd.print("Sit on *     ");
     break;
-  case 3:   // カウントダウン
+  case Status::Countdown:   // カウントダウン
     M5.Lcd.print("Cnt-dwn      ");
     break;
-  case 4:   // 手動カウントダウン
+  case Status::ManualCountdown:   // 手動カウントダウン
     M5.Lcd.print("Cnt-dwn      ");
     break;
   }
 
-  M5.Lcd.setCursor(5, 60, 7);
-  if (status == 3 || status == 4) {
-    int secTime = (COUNTDOWN_TIMER - (millis() - timeValue)) / 1000;
+  M5.Lcd.setCursor(20, 60, 7);
+  if (status == Status::Countdown || status == Status::ManualCountdown) {
+    int secTime = (COUNTDOWN_TIMER - (millis() - timeChangeStatus)) / 1000;
     if (secTime < 0)
       secTime = 0;  // タイミングによってはマイナスになってしまうこともある
     M5.Lcd.printf("%.03ds   ", secTime);
@@ -282,7 +327,7 @@ void loop() {
 
   // 加速度のデバッグ表示
   M5.Lcd.setCursor(5, 208, 2);
-  M5.Lcd.printf("Acc:\n  %.2f %.2f %.2f   ", accX, accY, accZ);
+  M5.Lcd.printf("Acc:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
 
   delay(DELAY_TIME);
 }
