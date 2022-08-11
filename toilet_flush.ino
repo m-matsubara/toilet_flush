@@ -184,7 +184,7 @@ void displaySplash() {
 void displayOn() {
   displayOnFlag = true;
   M5.Axp.SetLDO2(displayOnFlag);
-  timeDisplayOn = millis();
+  timeDisplayOn = timeValue;
 
   // CPU速度を240Mhzに変更
   setCpuFrequencyMhz(240);
