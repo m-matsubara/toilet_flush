@@ -47,8 +47,16 @@
 #include <VL53L0X.h>
 #include <Wire.h>
 
+// LovyyanGFX の設定
+#define LGFX_AUTODETECT
+#define LGFX_M5STICK_C
+#define LGFX_USE_V1
+#include <LovyanGFX.hpp>
+#include <LGFX_AUTODETECT.hpp>
+
 // デバッグの時定義
 //#define DEBUG
+
 
 // 赤外線LED接続端子定数
 const uint16_t IR_LED_INTERNAL = 9;  // 内蔵赤外線 LED
@@ -78,6 +86,8 @@ IRsend irsendInternal(IR_LED_INTERNAL); // 内蔵赤外線 LED
 
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
+
+static LGFX lcd;
 
 // loop処理の時刻（loop()関数の中で更新）
 uint32_t timeValue = millis();
@@ -119,45 +129,81 @@ void changeStatus(Status newStatus) {
  */
 void initDisplay() {
   // 解像度：135x240
-  //M5.Lcd.setRotation(2);
-  M5.Lcd.fillScreen(BLACK);
+  //lcd.setRotation(2);
+  lcd.fillScreen(BLACK);
 
-  M5.Lcd.fillRect(0, 0, 135, 18, NAVY);
-  M5.Lcd.setTextColor(WHITE, NAVY);
-  M5.Lcd.setCursor(5, 0, 2);
-  M5.Lcd.println("Toilet flush v0.3");
+  lcd.fillRect(0, 0, 135, 18, NAVY);
+  lcd.setTextColor(WHITE, NAVY);
+  lcd.setCursor(5, 0, 2);
+  lcd.println("Toilet flush v0.3");
 
-  M5.Lcd.setTextColor(WHITE, BLACK);
+  lcd.setTextColor(WHITE, BLACK);
 }
 
 /**
- * アニメーションのキャラクタ表示
+ * アニメーションのキャラクタ表示（モノアイ）
  */
-void drawAnime() {
+void drawAnimeAiMonoeye() {
     int offsetX = 0;
 //    if (animeCounter % 10 == 3 || animeCounter % 10 == 5 || animeCounter % 10 == 6)
 //      offsetX = 3;
 //    if (animeCounter % 10 == 9)
 //      offsetX = -7;
-    int16_t edgeColor = NAVY;
-    int16_t outColor = BLUE;
-    int16_t inColor = CYAN;
+    int16_t edgeColor = RED;
+    int16_t outColor = ORANGE;
+    int16_t inColor = YELLOW;
     if (rangefinderUseFlag) {
-      edgeColor = RED;
-      outColor = ORANGE;
-      inColor = YELLOW;
+      edgeColor = NAVY;
+      outColor = BLUE;
+      inColor = CYAN;
     }
     if (animeCounter % 2 == 0) {
-      M5.Lcd.fillCircle(66, 160, 33, BLACK);
-      M5.Lcd.fillCircle(66, 160, 30, edgeColor);
-      M5.Lcd.fillCircle(66, 160, 29, outColor);
-      M5.Lcd.fillCircle(66 + offsetX, 160, 15, inColor);
+      lcd.fillCircle(66, 160, 33, BLACK);
+      lcd.fillCircle(66, 160, 30, edgeColor);
+      lcd.fillCircle(66, 160, 29, outColor);
+      lcd.fillCircle(66 + offsetX, 160, 15, inColor);
     } else {
-      M5.Lcd.fillCircle(66, 160, 33, edgeColor);
-      M5.Lcd.fillCircle(66, 160, 32, outColor);
-      M5.Lcd.fillCircle(66 + offsetX, 160, 12, inColor);
+      lcd.fillCircle(66, 160, 33, edgeColor);
+      lcd.fillCircle(66, 160, 32, outColor);
+      lcd.fillCircle(66 + offsetX, 160, 12, inColor);
     }
     animeCounter++;
+}
+
+
+/**
+ * アニメーションのキャラクタ表示（アニメ風の両目）
+ */
+void drawAnimeDoubleEye() {
+    int offsetX = 0;
+    if (animeCounter % 12 == 8)
+      offsetX = 6;
+    if (animeCounter % 12 == 10)
+      offsetX = -6;
+    int16_t edgeColor = NAVY;
+    int16_t outColor = WHITE;
+    int16_t inColor = MAROON;
+    if (rangefinderUseFlag) {
+      edgeColor = RED;
+      inColor = NAVY;
+    }
+    if (animeCounter % 12 == 1 || animeCounter % 12 == 4 || animeCounter % 12 == 6) {
+      lcd.fillEllipse(43, 160, 24, 30, BLACK);
+      lcd.fillEllipse(92, 160, 24, 30, BLACK);
+      lcd.fillRect(43 - 20 + offsetX, 160 + 1, 20 * 2, 4, DARKGREY);
+      lcd.fillRect(92 - 20 + offsetX, 160 + 1, 20 * 2, 4, DARKGREY);
+    } else {
+      lcd.fillEllipse(43, 160, 24, 30, outColor);
+      lcd.fillEllipse(92, 160, 24, 30, outColor);
+      lcd.fillCircle(43 + offsetX, 160, 12, inColor);
+      lcd.fillCircle(92 + offsetX, 160, 12, inColor);
+    }
+    animeCounter++;
+}
+
+void drawAnime() {
+  drawAnimeAiMonoEye();
+  drawAnimeDoubleEye();
 }
 
 /**
@@ -166,10 +212,10 @@ void drawAnime() {
 void displaySplash() {
   initDisplay();
 
-  M5.Lcd.setCursor(5, 20, 4);
-  M5.Lcd.println("Welcome");
-  M5.Lcd.println("          to");
-  M5.Lcd.println("        toilet");
+  lcd.setCursor(5, 20, 4);
+  lcd.println("Welcome");
+  lcd.println("          to");
+  lcd.println("        toilet");
 
   for (int idx = 0; idx < 4; idx++) {
     drawAnime();
@@ -216,11 +262,11 @@ void flush() {
   displayOn();
   // CPU の速度が10Mhzのままだと赤外線が送れない
   setCpuFrequencyMhz(240);
-  M5.Lcd.fillScreen(BLUE);
-  M5.Lcd.setTextColor(WHITE, BLUE);
-  M5.Lcd.setCursor(20, 127, 4);
-  M5.Lcd.println("FLUSH !!");
-  M5.Lcd.setTextColor(WHITE, BLACK);
+  lcd.fillScreen(BLUE);
+  lcd.setTextColor(WHITE, BLUE);
+  lcd.setCursor(20, 127, 4);
+  lcd.println("FLUSH !!");
+  lcd.setTextColor(WHITE, BLACK);
   
   irsendExternal.sendInax(0x5C30CF);
   delay(500);
@@ -237,10 +283,15 @@ void flush() {
 void setup() {
   // M5初期化
   M5.begin();
+
+#ifdef LGFX_AUTODETECT
+  lcd.init();
+  lcd.setBrightness(200);
+#endif
   
   // LCD明るさ
   M5.Axp.ScreenBreath(12); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
-  M5.Lcd.fillScreen(BLACK);
+  lcd.fillScreen(BLACK);
 
   // 外付け赤外線LEDの初期化
   irsendExternal.begin();
@@ -397,34 +448,34 @@ void loop() {
   }
 
   // ステータスの表示
-  M5.Lcd.setCursor(5, 30, 4);
+  lcd.setCursor(5, 30, 4);
   switch (status) {
   case Status::Waiting:   // 待機中 
-    M5.Lcd.print("Waiting      ");
+    lcd.print("Waiting      ");
     break;
   case Status::SitOn:   // 着座確認（長時間着座待ち）
-    M5.Lcd.print("Sit on       ");
+    lcd.print("Sit on       ");
     break;
   case Status::SitOnLong:   // 長時間着座(離席待ち)
-    M5.Lcd.print("Sit on *     ");
+    lcd.print("Sit on *     ");
     break;
   case Status::Countdown:   // カウントダウン
-    M5.Lcd.print("Cnt-dwn      ");
+    lcd.print("Cnt-dwn      ");
     break;
   case Status::ManualCountdown:   // 手動カウントダウン
-    M5.Lcd.print("Cnt-dwn      ");
+    lcd.print("Cnt-dwn      ");
     break;
   }
 
   // カウントダウンタイマー表示
-  M5.Lcd.setCursor(20, 60, 7);
+  lcd.setCursor(20, 60, 7);
   if (status == Status::Countdown || status == Status::ManualCountdown) {
     int secTime = (COUNTDOWN_TIMER - (timeValue - timeChangeStatus)) / 1000;
     if (secTime < 0)
       secTime = 0;  // タイミングによってはマイナスになってしまうこともある
-    M5.Lcd.printf("%.03d", secTime);
+    lcd.printf("%.03d", secTime);
   } else {
-    M5.Lcd.print("        ");
+    lcd.print("        ");
   }
 
   // アニメーション
@@ -434,10 +485,10 @@ void loop() {
   }
 
   // 加速度のデバッグ表示
-  M5.Lcd.setTextColor(LIGHTGREY, BLACK);
-  M5.Lcd.setCursor(5, 208, 2);
-  M5.Lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
-  M5.Lcd.setTextColor(WHITE, BLACK);
+  lcd.setTextColor(LIGHTGREY, BLACK);
+  lcd.setCursor(5, 208, 2);
+  lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
+  lcd.setTextColor(WHITE, BLACK);
 
   delay(DELAY_TIME);
 }
