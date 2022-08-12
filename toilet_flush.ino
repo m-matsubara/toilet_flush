@@ -40,6 +40,7 @@
  *   
  */
 
+#include <stdlib.h>
 #include <Arduino.h>
 #include <M5StickCPlus.h>
 #include <IRremoteESP8266.h>
@@ -76,9 +77,6 @@ const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（�
 
 // 人感センサー検知後のディスプレイ点灯時間(ms)
 const int DISPLAY_TIMER = COUNTDOWN_TIMER;
-
-// 処理ごとの待ち時間(ms)
-const int DELAY_TIME = 30;
 
 // 赤外線送信クラス
 IRsend irsendExternal(IR_LED_EXTERNAL); // M5Stack用赤外線送受信ユニット(GROVE互換端子)
@@ -143,7 +141,7 @@ void initDisplay() {
 /**
  * アニメーションのキャラクタ表示（モノアイ）
  */
-void drawAnimeAiMonoeye() {
+void drawAnimeAiMonoEye() {
     int offsetX = 0;
 //    if (animeCounter % 10 == 3 || animeCounter % 10 == 5 || animeCounter % 10 == 6)
 //      offsetX = 3;
@@ -203,7 +201,7 @@ void drawAnimeDoubleEye() {
 
 void drawAnime() {
   drawAnimeAiMonoEye();
-  drawAnimeDoubleEye();
+  //drawAnimeDoubleEye();
 }
 
 /**
@@ -271,7 +269,17 @@ void flush() {
   irsendExternal.sendInax(0x5C30CF);
   delay(500);
   irsendInternal.sendInax(0x5C30CF);
-  delay(500);
+  // 白い泡が下に流れるイメージのアニメーション
+  for (int y = 0; y < 240; y++) {
+    for (int idx = 0; idx < 10; idx++) {
+      int r = rand() % 10 + 1;
+      int x = rand() % 135;
+      lcd.fillCircle(x, y, r, WHITE);
+    }
+    lcd.fillRect(0, y - 11, 135, 2, WHITE);
+    delay(5);
+  }
+  
   initDisplay();
 
   // CPU速度を戻す
@@ -283,6 +291,9 @@ void flush() {
 void setup() {
   // M5初期化
   M5.begin();
+
+  // 500000us = 500msのスリープタイマー設定
+  esp_sleep_enable_timer_wakeup(500000);
 
 #ifdef LGFX_AUTODETECT
   lcd.init();
@@ -347,8 +358,8 @@ void loop() {
   boolean sitOnFlg = (accY < 0.5);  // LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0
 
   // ボタン値取得
-  boolean btnA = M5.BtnA.wasReleased();
-  boolean btnB = M5.BtnB.wasReleased();
+  boolean btnA = M5.BtnA.wasPressed();
+  boolean btnB = M5.BtnB.wasPressed();
   boolean btnPower = (M5.Axp.GetBtnPress() != 0);
 
   // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
@@ -362,7 +373,7 @@ void loop() {
         distance = rangefinder.readRangeContinuousMillimeters();
         //Serial.print("distance: ");
         //Serial.println(distance);
-        delay(DELAY_TIME);
+        delay(10);
       } while (distance < 250);
     }
   }
@@ -401,6 +412,7 @@ void loop() {
   }
   if (btnPower) {
     // 電源ボタンを押すと（6秒未満）リセット
+    lcd.fillScreen(BLACK);
     esp_restart();
   }
 
@@ -447,48 +459,61 @@ void loop() {
     break;
   }
 
-  // ステータスの表示
-  lcd.setCursor(5, 30, 4);
-  switch (status) {
-  case Status::Waiting:   // 待機中 
-    lcd.print("Waiting      ");
-    break;
-  case Status::SitOn:   // 着座確認（長時間着座待ち）
-    lcd.print("Sit on       ");
-    break;
-  case Status::SitOnLong:   // 長時間着座(離席待ち)
-    lcd.print("Sit on *     ");
-    break;
-  case Status::Countdown:   // カウントダウン
-    lcd.print("Cnt-dwn      ");
-    break;
-  case Status::ManualCountdown:   // 手動カウントダウン
-    lcd.print("Cnt-dwn      ");
-    break;
+  if (displayOnFlag) {
+    // ステータスの表示
+    lcd.setCursor(5, 30, 4);
+    switch (status) {
+    case Status::Waiting:   // 待機中 
+      lcd.print("Waiting      ");
+      break;
+    case Status::SitOn:   // 着座確認（長時間着座待ち）
+      lcd.print("Sit on       ");
+      break;
+    case Status::SitOnLong:   // 長時間着座(離席待ち)
+      lcd.print("Sit on *     ");
+      break;
+    case Status::Countdown:   // カウントダウン
+      lcd.print("Cnt-dwn      ");
+      break;
+    case Status::ManualCountdown:   // 手動カウントダウン
+      lcd.print("Cnt-dwn      ");
+      break;
+    }
+  
+    // カウントダウンタイマー表示
+    lcd.setCursor(20, 60, 7);
+    if (status == Status::Countdown || status == Status::ManualCountdown) {
+      int secTime = (COUNTDOWN_TIMER - (timeValue - timeChangeStatus)) / 1000;
+      if (secTime < 0)
+        secTime = 0;  // タイミングによってはマイナスになってしまうこともある
+      lcd.printf("%.03d", secTime);
+    } else {
+      lcd.print("        ");
+    }
+  
+    // アニメーション
+    if (timeValue - timeAnime >= 1000) {
+      drawAnime();
+      timeAnime = timeValue;
+    }
+  
+    // 加速度のデバッグ表示
+/*
+    lcd.setTextColor(LIGHTGREY, BLACK);
+    lcd.setCursor(5, 208, 2);
+    lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
+    lcd.setTextColor(WHITE, BLACK);
+*/
+/*
+    int width = 130 * accY;
+    lcd.fillRect(0, 235, width, 5, DARKGREY);
+    lcd.fillRect(width, 235, 130 - width, 5, BLACK);
+*/
   }
 
-  // カウントダウンタイマー表示
-  lcd.setCursor(20, 60, 7);
-  if (status == Status::Countdown || status == Status::ManualCountdown) {
-    int secTime = (COUNTDOWN_TIMER - (timeValue - timeChangeStatus)) / 1000;
-    if (secTime < 0)
-      secTime = 0;  // タイミングによってはマイナスになってしまうこともある
-    lcd.printf("%.03d", secTime);
+  if (displayOnFlag) {
+    delay(10);
   } else {
-    lcd.print("        ");
+    esp_light_sleep_start();  // 500ms 待つ（ボタン操作性ちょっと悪い）
   }
-
-  // アニメーション
-  if (timeValue - timeAnime >= 1000) {
-    drawAnime();
-    timeAnime = timeValue;
-  }
-
-  // 加速度のデバッグ表示
-  lcd.setTextColor(LIGHTGREY, BLACK);
-  lcd.setCursor(5, 208, 2);
-  lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
-  lcd.setTextColor(WHITE, BLACK);
-
-  delay(DELAY_TIME);
 }
