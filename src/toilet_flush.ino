@@ -56,6 +56,13 @@
 // LovyanGFX 使用時定義する
 //#define USE_LOVYANGFX 
 
+// 外付け赤外線LEDを使用する時定義する（M5Stack用赤外線送受信ユニット(GROVE互換端子)）
+#define USE_EXTERNAL_IR_LED
+
+// 内蔵赤外線LEDを使用する時定義する
+//#define USE_INTERNAL_IR_LED
+
+
 #include <stdlib.h>
 #include <Arduino.h>
 #include <M5StickCPlus.h>
@@ -149,8 +156,12 @@ const int32_t CL_VIOLET      = 0x0120;
 const int DISPLAY_TIMER = COUNTDOWN_TIMER;
 
 // 赤外線送信クラス
+#ifdef USE_EXTERNAL_IR_LED
 IRsend irsendExternal(IR_LED_EXTERNAL); // M5Stack用赤外線送受信ユニット(GROVE互換端子)
+#endif
+#ifdef USE_INTERNAL_IR_LED
 IRsend irsendInternal(IR_LED_INTERNAL); // 内蔵赤外線 LED
+#endif
 
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
@@ -338,10 +349,15 @@ void flush() {
   lcd.setCursor(20, 127, 4);
   lcd.println("FLUSH !!");
   lcd.setTextColor(CL_WHITE, CL_BLACK);
-  
+
+#ifdef USE_EXTERNAL_IR_LED
   irsendExternal.sendInax(0x5C30CF);
+#endif
   delay(500);
+#ifdef USE_INTERNAL_IR_LED
   irsendInternal.sendInax(0x5C30CF);
+#endif
+
   // 白い泡が下に流れるイメージのアニメーション
   for (int y = -20; y < 240; y++) {
     for (int idx = 0; idx < 10; idx++) {
@@ -392,10 +408,14 @@ void setup() {
   lcd.fillScreen(CL_BLACK);
 
   // 外付け赤外線LEDの初期化
+#ifdef USE_EXTERNAL_IR_LED
   irsendExternal.begin();
+#endif
 
   // 内蔵赤外線LEDの初期化
+#ifdef USE_INTERNAL_IR_LED
   irsendInternal.begin();
+#endif
 
   // 距離計の初期化
   Wire.begin(0, 26, 100000UL); // I2C of HAT Connection
@@ -660,7 +680,8 @@ void loop() {
   if (displayOnFlag) {
     delay(10);
   } else {
-    //delay(500);
-    esp_light_sleep_start();  // 500ms 待つ（ボタン操作性ちょっと悪い）
+    // 500ms 待つ（ボタン操作性ちょっと悪い）
+    delay(500);
+    //esp_light_sleep_start();  
   }
 }
