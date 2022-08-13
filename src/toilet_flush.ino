@@ -54,7 +54,7 @@
 //#define DEBUG
 
 // LovyanGFX 使用時定義する
-#define USE_LOVYANGFX 
+//#define USE_LOVYANGFX 
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -71,8 +71,6 @@
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 #include <LGFX_AUTODETECT.hpp>
-#else
-#define lcd M5.Lcd
 #endif
 
 
@@ -94,57 +92,57 @@ const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（�
 
 #ifdef USE_LOVYANGFX
 // 色定義
-#define CL_BLACK       TFT_BLACK
-#define CL_NAVY        TFT_NAVY
-#define CL_DARKGREEN   TFT_DARKGREEN
-#define CL_DARKCYAN    TFT_DARKCYAN
-#define CL_MAROON      TFT_MAROON
-#define CL_PURPLE      TFT_PURPLE
-#define CL_OLIVE       TFT_OLIVE
-#define CL_LIGHTGREY   TFT_LIGHTGREY
-#define CL_DARKGREY    TFT_DARKGREY
-#define CL_BLUE        TFT_BLUE
-#define CL_GREEN       TFT_GREEN
-#define CL_CYAN        TFT_CYAN
-#define CL_RED         TFT_RED
-#define CL_MAGENTA     TFT_MAGENTA
-#define CL_YELLOW      TFT_YELLOW
-#define CL_WHITE       TFT_WHITE
-#define CL_ORANGE      TFT_ORANGE
-#define CL_GREENYELLOW TFT_GREENYELLOW
-#define CL_PINK        TFT_PINK
-#define CL_BROWN       TFT_BROWN
-#define CL_GOLD        TFT_GOLD
-#define CL_SILVER      TFT_SILVER
-#define CL_SKYBLUE     TFT_SKYBLUE
-#define CL_VIOLET      TFT_VIOLET
-//#define CL_TRANSPARENT TFT_TRANSPARENT
+const int32_t CL_BLACK       = TFT_BLACK;
+const int32_t CL_NAVY        = TFT_NAVY;
+const int32_t CL_DARKGREEN   = TFT_DARKGREEN;
+const int32_t CL_DARKCYAN    = TFT_DARKCYAN;
+const int32_t CL_MAROON      = TFT_MAROON;
+const int32_t CL_PURPLE      = TFT_PURPLE;
+const int32_t CL_OLIVE       = TFT_OLIVE;
+const int32_t CL_LIGHTGREY   = TFT_LIGHTGREY;
+const int32_t CL_DARKGREY    = TFT_DARKGREY;
+const int32_t CL_BLUE        = TFT_BLUE;
+const int32_t CL_GREEN       = TFT_GREEN;
+const int32_t CL_CYAN        = TFT_CYAN;
+const int32_t CL_RED         = TFT_RED;
+const int32_t CL_MAGENTA     = TFT_MAGENTA;
+const int32_t CL_YELLOW      = TFT_YELLOW;
+const int32_t CL_WHITE       = TFT_WHITE;
+const int32_t CL_ORANGE      = TFT_ORANGE;
+const int32_t CL_GREENYELLOW = TFT_GREENYELLOW;
+const int32_t CL_PINK        = TFT_PINK;
+const int32_t CL_BROWN       = TFT_BROWN;
+const int32_t CL_GOLD        = TFT_GOLD;
+const int32_t CL_SILVER      = TFT_SILVER;
+const int32_t CL_SKYBLUE     = TFT_SKYBLUE;
+const int32_t CL_VIOLET      = TFT_VIOLET;
+//const int32_t CL_TRANSPARENT = TFT_TRANSPARENT;
 #else
 // 色定義
-#define CL_BLACK       BLACK
-#define CL_NAVY        NAVY
-#define CL_DARKGREEN   DARKGREEN
-#define CL_DARKCYAN    DARKCYAN
-#define CL_MAROON      MAROON
-#define CL_PURPLE      PURPLE
-#define CL_OLIVE       OLIVE
-#define CL_LIGHTGREY   LIGHTGREY
-#define CL_DARKGREY    DARKGREY
-#define CL_BLUE        BLUE
-#define CL_GREEN       GREEN
-#define CL_CYAN        CYAN
-#define CL_RED         RED
-#define CL_MAGENTA     MAGENTA
-#define CL_YELLOW      YELLOW
-#define CL_WHITE       WHITE
-#define CL_ORANGE      ORANGE
-#define CL_GREENYELLOW GREENYELLOW
-#define CL_PINK        PINK
-#define CL_BROWN       0x9A60
-#define CL_GOLD        0xFEA0
-#define CL_SILVER      0xC618
-#define CL_SKYBLUE     0x015C
-#define CL_VIOLET      0x0120
+const int32_t CL_BLACK       = BLACK;
+const int32_t CL_NAVY        = NAVY;
+const int32_t CL_DARKGREEN   = DARKGREEN;
+const int32_t CL_DARKCYAN    = DARKCYAN;
+const int32_t CL_MAROON      = MAROON;
+const int32_t CL_PURPLE      = PURPLE;
+const int32_t CL_OLIVE       = OLIVE;
+const int32_t CL_LIGHTGREY   = LIGHTGREY;
+const int32_t CL_DARKGREY    = DARKGREY;
+const int32_t CL_BLUE        = BLUE;
+const int32_t CL_GREEN       = GREEN;
+const int32_t CL_CYAN        = CYAN;
+const int32_t CL_RED         = RED;
+const int32_t CL_MAGENTA     = MAGENTA;
+const int32_t CL_YELLOW      = YELLOW;
+const int32_t CL_WHITE       = WHITE;
+const int32_t CL_ORANGE      = ORANGE;
+const int32_t CL_GREENYELLOW = GREENYELLOW;
+const int32_t CL_PINK        = PINK;
+const int32_t CL_BROWN       = 0x9A60;
+const int32_t CL_GOLD        = 0xFEA0;
+const int32_t CL_SILVER      = 0xC618;
+const int32_t CL_SKYBLUE     = 0x015C;
+const int32_t CL_VIOLET      = 0x0120;
 #endif
 
 // 人感センサー検知後のディスプレイ点灯時間(ms)
@@ -160,6 +158,9 @@ VL53L0X rangefinder;
 #ifdef USE_LOVYANGFX
 // LovyanGFX
 static LGFX lcd;
+#else
+#undef lcd // M5StickCPlus.h で定義されている
+#define lcd M5.Lcd
 #endif
 
 // loop処理の時刻（loop()関数の中で更新）
@@ -212,6 +213,9 @@ void initDisplay() {
  * アニメーションのキャラクタ表示（モノアイ）
  */
 void drawAnimeAiMonoEye() {
+    // M5stickC Plusのディスプレイはアスペクト比が1.0ではない。
+    // そのまま描くと縦に少しつぶれた形となる。このため、縦方向に1.067を掛ける
+    // (物理サイズ: 2.50cm x 1.50cm , ドット数: 240px x 135 px)
     int offsetX = 0;
 //    if (animeCounter % 10 == 3 || animeCounter % 10 == 5 || animeCounter % 10 == 6)
 //      offsetX = 3;
@@ -226,14 +230,14 @@ void drawAnimeAiMonoEye() {
       inColor = CL_CYAN;
     }
     if (animeCounter % 2 == 0) {
-      lcd.fillEllipse(66, 160, 33, 33 * 1.05, CL_BLACK);
-      lcd.fillEllipse(66, 160, 30, 30 * 1.05, edgeColor);
-      lcd.fillEllipse(66, 160, 29, 29 * 1.05, outColor);
-      lcd.fillEllipse(66 + offsetX, 160, 15, 15 * 1.05, inColor);
+      lcd.fillEllipse(66, 160, 33, 33 * 1.067, CL_BLACK);
+      lcd.fillEllipse(66, 160, 30, 30 * 1.067, edgeColor);
+      lcd.fillEllipse(66, 160, 29, 29 * 1.067, outColor);
+      lcd.fillEllipse(66 + offsetX, 160, 15, 15 * 1.067, inColor);
     } else {
-      lcd.fillEllipse(66, 160, 33, 33 * 1.05, edgeColor);
-      lcd.fillEllipse(66, 160, 32, 32 * 1.05, outColor);
-      lcd.fillEllipse(66 + offsetX, 160, 12, 12 * 1.05, inColor);
+      lcd.fillEllipse(66, 160, 33, 33 * 1.067, edgeColor);
+      lcd.fillEllipse(66, 160, 32, 32 * 1.067, outColor);
+      lcd.fillEllipse(66 + offsetX, 160, 12, 12 * 1.067, inColor);
     }
     animeCounter++;
 }
@@ -399,13 +403,17 @@ void setup() {
   if (rangefinder.init()) {
     rangefinderUseFlag = true;
     rangefinder.startContinuous();
+#ifdef DEBUG
     Serial.println("use rangefinder.");
+#endif
   } else {
     // 距離計が初期化できない場合、人感センサーを利用する。（接続確認はできない）
     pinMode(36, INPUT_PULLDOWN);
     pirUseFlag = true;
+#ifdef DEBUG
     Serial.println("unuse rangefinder.");
     Serial.println("use PIR HAT.");
+#endif
   }
 
   // 6軸センサ初期化
@@ -453,6 +461,7 @@ void loop() {
   float currentBat = M5.Axp.GetBatCurrent();
   float voltageBus = M5.Axp.GetVBusVoltage();
   float currentBus = M5.Axp.GetVBusCurrent();
+#ifdef DEBUG
   Serial.print("Bat(V).  ");
   Serial.println(voltageBat);
   Serial.print("Bat(A).  ");
@@ -461,18 +470,22 @@ void loop() {
   Serial.println(voltageBus);
   Serial.print("V-in(A). ");
   Serial.println(currentBus);
-  
+#endif  
   // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
   if (rangefinderUseFlag) {
     uint16_t distance = rangefinder.readRangeContinuousMillimeters();
+#ifdef DEBUG
     //Serial.print("distance: ");
     //Serial.println(distance);
+#endif  
     if ((accY > 0.75) && (distance <= 200)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
       btnA = true;
       do {
         distance = rangefinder.readRangeContinuousMillimeters();
+#ifdef DEBUG
         //Serial.print("distance: ");
         //Serial.println(distance);
+#endif  
         delay(10);
       } while (distance < 250);
     }
@@ -536,10 +549,12 @@ void loop() {
     }
     break;
   case Status::Countdown:   // カウントダウン
+#ifdef DEBUG
     Serial.print("timeValue: ");
     Serial.print(timeValue);
     Serial.print(", timeChangeStatus: ");
     Serial.println(timeChangeStatus);
+#endif
     if (sitOnFlg) {
       changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
     } else if (timeValue - timeChangeStatus >= COUNTDOWN_TIMER) {
@@ -548,10 +563,12 @@ void loop() {
     }
     break;
   case Status::ManualCountdown:   // 手動カウントダウン
+#ifdef DEBUG
     Serial.print("timeValue: ");
     Serial.print(timeValue);
     Serial.print(", timeChangeStatus: ");
     Serial.println(timeChangeStatus);
+#endif
     if (timeValue - timeChangeStatus >= COUNTDOWN_TIMER) {
       flush();
       changeStatus(Status::Waiting);
@@ -609,30 +626,30 @@ void loop() {
       lcd.fillRect(width, 235, 130 - width, 5, CL_BLACK);
 */
       // ステータスバー・電源関連の情報表示
-      lcd.fillRect(0, 220, 135, 20, CL_NAVY);
+      lcd.fillRect(0, 224, 135, 20, CL_NAVY);
       int xIcon = 5;
-      int yIcon = 220;
+      int yIcon = 226;
       lcd.setTextColor(CL_LIGHTGREY, CL_NAVY);
-      lcd.setCursor(42, 226, 1);
+      lcd.setCursor(42, 224, 2);
       if (voltageBus >= 3.0) {
         // 外部電源（コンセントのアイコン）
-        lcd.fillRect(xIcon + 4, yIcon + 10, 6, 2, CL_DARKGREEN);
-        lcd.fillCircle(xIcon + 16, yIcon + 10, 6, CL_DARKGREEN);
-        lcd.fillRect(xIcon + 17, yIcon +  4, 6, 13, CL_DARKGREEN);
-        lcd.drawLine(xIcon + 22, yIcon +  7, xIcon + 28, yIcon +  7, CL_DARKGREEN);
-        lcd.drawLine(xIcon + 22, yIcon + 13, xIcon + 28, yIcon + 13, CL_DARKGREEN);
+        lcd.fillRect(xIcon  + 4, yIcon + 5, 7, 2, CL_DARKGREEN);
+        lcd.fillCircle(xIcon + 16, yIcon + 5, 5, CL_DARKGREEN);
+        lcd.fillRect(xIcon + 17, yIcon + 0, 5, 11, CL_DARKGREEN);
+        lcd.drawLine(xIcon + 22, yIcon + 3, xIcon + 28, yIcon + 3, CL_DARKGREEN);
+        lcd.drawLine(xIcon + 22, yIcon + 8, xIcon + 28, yIcon + 8, CL_DARKGREEN);
         
         lcd.printf(" %.2fV %.0fmA", voltageBus, currentBus);
       } else {
         // 内部電源（電池のアイコン）
-        lcd.drawRect(xIcon +  4, yIcon +  4, 21, 12, CL_DARKGREEN);
-        lcd.fillRect(xIcon + 25, yIcon +  7,  3,  6, CL_DARKGREEN);
-        if (voltageBat >= 3.9)
-          lcd.fillRect(xIcon +  6, yIcon +  6, 5, 8, CL_DARKGREEN);
-        if (voltageBat >= 3.7)
-          lcd.fillRect(xIcon +  12, yIcon +  6, 5, 8, CL_DARKGREEN);
+        lcd.drawRect(xIcon +  4, yIcon +  0, 21, 11, CL_DARKGREEN);
+        lcd.fillRect(xIcon + 25, yIcon +  3,  3,  5, CL_DARKGREEN);
         if (voltageBat >= 3.5)
-          lcd.fillRect(xIcon +  18, yIcon +  6, 5, 8, CL_DARKGREEN);
+          lcd.fillRect(xIcon +  6, yIcon +  2, 5, 7, CL_DARKGREEN);
+        if (voltageBat >= 3.7)
+          lcd.fillRect(xIcon +  12, yIcon +  2, 5, 7, CL_DARKGREEN);
+        if (voltageBat >= 3.9)
+          lcd.fillRect(xIcon +  18, yIcon +  2, 5, 7, CL_DARKGREEN);
         
         lcd.printf("%.2fV %.0fmA ", voltageBat, currentBat * -1.0);
       }
