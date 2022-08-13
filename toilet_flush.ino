@@ -192,14 +192,6 @@ int animeCounter = 0;
 uint32_t timeAnime = 0;
 
 
-// ステータス変更
-void changeStatus(Status newStatus) {
-  status = newStatus;
-  timeChangeStatus = timeValue;
-  if (status != Status::Waiting)
-    displayOn();
-}
-
 /**
  * 画面初期化
  */
@@ -367,6 +359,15 @@ void flush() {
   // CPU速度を戻す
   if (displayOnFlag == false)
     setCpuFrequencyMhz(10);
+}
+
+
+// ステータス変更
+void changeStatus(Status newStatus) {
+  status = newStatus;
+  timeChangeStatus = timeValue;
+  if (status != Status::Waiting)
+    displayOn();
 }
 
 
