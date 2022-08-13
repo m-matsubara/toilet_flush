@@ -14,6 +14,12 @@
  * * M5StickC ToF Hat（必須ではない。使用した場合は、M5ボタンの代わりに距離センサーで操作可能)
  * * M5StickC PIR Hat（必須ではない。使用した場合は、接近するとディスプレイをONにできる)
  * 
+ * ## 必要ライブラリ
+ *   M5StickCPlus      0.0.8  : M5Stack
+ *   IRremoteESP8266   2.8.2  : David Conran, Mark Szabo, Sebastien Warin, Roi Dayan, Massimiliano Pinto, Christian Nilsson
+ *   VL53L0X           1.3.1  : pololu
+ *   LovyanGFX         0.4.18 : lovyan03
+ *   
  * ## 参考
  *   M5StickC(ESP32)で赤外線リモコンを作ろう
  *   https://qiita.com/coppercele/items/ed91646944ca28ff0c07
@@ -32,13 +38,20 @@
  * 
  *   M5StickCでの省電力ノウハウ
  *   https://lang-ship.com/blog/work/m5stickc-power-saving/
- *
- * ## ライブラリ
- *   M5StickCPlus      0.0.8  : M5Stack
- *   IRremoteESP8266   2.8.2  : David Conran, Mark Szabo, Sebastien Warin, Roi Dayan, Massimiliano Pinto, Christian Nilsson
- *   VL53L0X           1.3.1  : pololu
  *   
+ *   【M5Stack】第二回 LCDの使い方 全集
+ *   https://shizenkarasuzon.hatenablog.com/entry/2020/05/21/012555
+ *   
+ *   LovyanGFX入門 その1 基本描画系
+ *   https://lang-ship.com/blog/work/lovyangfx-1/
+ *
  */
+
+// デバッグの時定義する
+//#define DEBUG
+
+// LovyanGFX 使用時定義する
+#define USE_LOVYANGFX 
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -48,15 +61,16 @@
 #include <VL53L0X.h>
 #include <Wire.h>
 
-// LovyyanGFX の設定
+// LovyanGFX の設定
+#ifdef USE_LOVYANGFX
 #define LGFX_AUTODETECT
 #define LGFX_M5STICK_C
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 #include <LGFX_AUTODETECT.hpp>
-
-// デバッグの時定義
-//#define DEBUG
+#else
+#define lcd M5.Lcd
+#endif
 
 
 // 赤外線LED接続端子定数
@@ -75,6 +89,61 @@ const int SITDOWN_TIMER   = 60000; // 長時間着座タイマー(ms)
 const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
 #endif
 
+#ifdef USE_LOVYANGFX
+// 色定義
+#define CL_BLACK       TFT_BLACK
+#define CL_NAVY        TFT_NAVY
+#define CL_DARKGREEN   TFT_DARKGREEN
+#define CL_DARKCYAN    TFT_DARKCYAN
+#define CL_MAROON      TFT_MAROON
+#define CL_PURPLE      TFT_PURPLE
+#define CL_OLIVE       TFT_OLIVE
+#define CL_LIGHTGREY   TFT_LIGHTGREY
+#define CL_DARKGREY    TFT_DARKGREY
+#define CL_BLUE        TFT_BLUE
+#define CL_GREEN       TFT_GREEN
+#define CL_CYAN        TFT_CYAN
+#define CL_RED         TFT_RED
+#define CL_MAGENTA     TFT_MAGENTA
+#define CL_YELLOW      TFT_YELLOW
+#define CL_WHITE       TFT_WHITE
+#define CL_ORANGE      TFT_ORANGE
+#define CL_GREENYELLOW TFT_GREENYELLOW
+#define CL_PINK        TFT_PINK
+#define CL_BROWN       TFT_BROWN
+#define CL_GOLD        TFT_GOLD
+#define CL_SILVER      TFT_SILVER
+#define CL_SKYBLUE     TFT_SKYBLUE
+#define CL_VIOLET      TFT_VIOLET
+//#define CL_TRANSPARENT TFT_TRANSPARENT
+#else
+// 色定義
+#define CL_BLACK       BLACK
+#define CL_NAVY        NAVY
+#define CL_DARKGREEN   DARKGREEN
+#define CL_DARKCYAN    DARKCYAN
+#define CL_MAROON      MAROON
+#define CL_PURPLE      PURPLE
+#define CL_OLIVE       OLIVE
+#define CL_LIGHTGREY   LIGHTGREY
+#define CL_DARKGREY    DARKGREY
+#define CL_BLUE        BLUE
+#define CL_GREEN       GREEN
+#define CL_CYAN        CYAN
+#define CL_RED         RED
+#define CL_MAGENTA     MAGENTA
+#define CL_YELLOW      YELLOW
+#define CL_WHITE       WHITE
+#define CL_ORANGE      ORANGE
+#define CL_GREENYELLOW GREENYELLOW
+#define CL_PINK        PINK
+#define CL_BROWN       0x9A60
+#define CL_GOLD        0xFEA0
+#define CL_SILVER      0xC618
+#define CL_SKYBLUE     0x015C
+#define CL_VIOLET      0x0120
+#endif
+
 // 人感センサー検知後のディスプレイ点灯時間(ms)
 const int DISPLAY_TIMER = COUNTDOWN_TIMER;
 
@@ -85,7 +154,10 @@ IRsend irsendInternal(IR_LED_INTERNAL); // 内蔵赤外線 LED
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
 
+#ifdef USE_LOVYANGFX
+// LovyanGFX
 static LGFX lcd;
+#endif
 
 // loop処理の時刻（loop()関数の中で更新）
 uint32_t timeValue = millis();
@@ -95,6 +167,9 @@ enum class Status { Waiting, SitOn, SitOnLong, Countdown, ManualCountdown };
 Status status = Status::Waiting;
 // 一部のステータスで使用するステータスが変更された時刻
 uint32_t timeChangeStatus = 0;
+
+//　着座判定
+boolean sitOnFlg = false;
 
 // ディスプレイを点灯した時刻
 uint32_t timeDisplayOn = 0;
@@ -130,12 +205,12 @@ void initDisplay() {
   //lcd.setRotation(2);
   lcd.fillScreen(BLACK);
 
-  lcd.fillRect(0, 0, 135, 18, NAVY);
-  lcd.setTextColor(WHITE, NAVY);
+  lcd.fillRect(0, 0, 135, 18, CL_NAVY);
+  lcd.setTextColor(CL_WHITE, CL_NAVY);
   lcd.setCursor(5, 0, 2);
   lcd.println("Toilet flush v0.3");
 
-  lcd.setTextColor(WHITE, BLACK);
+  lcd.setTextColor(CL_WHITE, CL_BLACK);
 }
 
 /**
@@ -147,16 +222,16 @@ void drawAnimeAiMonoEye() {
 //      offsetX = 3;
 //    if (animeCounter % 10 == 9)
 //      offsetX = -7;
-    int16_t edgeColor = RED;
-    int16_t outColor = ORANGE;
-    int16_t inColor = YELLOW;
+    int16_t edgeColor = CL_RED;
+    int16_t outColor = CL_ORANGE;
+    int16_t inColor = CL_YELLOW;
     if (rangefinderUseFlag) {
-      edgeColor = NAVY;
-      outColor = BLUE;
-      inColor = CYAN;
+      edgeColor = CL_NAVY;
+      outColor = CL_BLUE;
+      inColor = CL_CYAN;
     }
     if (animeCounter % 2 == 0) {
-      lcd.fillCircle(66, 160, 33, BLACK);
+      lcd.fillCircle(66, 160, 33, CL_BLACK);
       lcd.fillCircle(66, 160, 30, edgeColor);
       lcd.fillCircle(66, 160, 29, outColor);
       lcd.fillCircle(66 + offsetX, 160, 15, inColor);
@@ -178,18 +253,18 @@ void drawAnimeDoubleEye() {
       offsetX = 6;
     if (animeCounter % 12 == 10)
       offsetX = -6;
-    int16_t edgeColor = NAVY;
-    int16_t outColor = WHITE;
-    int16_t inColor = MAROON;
+    int16_t edgeColor = CL_NAVY;
+    int16_t outColor = CL_WHITE;
+    int16_t inColor = CL_MAROON;
     if (rangefinderUseFlag) {
-      edgeColor = RED;
-      inColor = NAVY;
+      edgeColor = CL_RED;
+      inColor = CL_NAVY;
     }
     if (animeCounter % 12 == 1 || animeCounter % 12 == 4 || animeCounter % 12 == 6) {
-      lcd.fillEllipse(43, 160, 24, 30, BLACK);
-      lcd.fillEllipse(92, 160, 24, 30, BLACK);
-      lcd.fillRect(43 - 20 + offsetX, 160 + 1, 20 * 2, 4, DARKGREY);
-      lcd.fillRect(92 - 20 + offsetX, 160 + 1, 20 * 2, 4, DARKGREY);
+      lcd.fillEllipse(43, 160, 24, 30, CL_BLACK);
+      lcd.fillEllipse(92, 160, 24, 30, CL_BLACK);
+      lcd.fillRect(43 - 20 + offsetX, 160 + 1, 20 * 2, 4, CL_DARKGREY);
+      lcd.fillRect(92 - 20 + offsetX, 160 + 1, 20 * 2, 4, CL_DARKGREY);
     } else {
       lcd.fillEllipse(43, 160, 24, 30, outColor);
       lcd.fillEllipse(92, 160, 24, 30, outColor);
@@ -260,11 +335,11 @@ void flush() {
   displayOn();
   // CPU の速度が10Mhzのままだと赤外線が送れない
   setCpuFrequencyMhz(240);
-  lcd.fillScreen(BLUE);
-  lcd.setTextColor(WHITE, BLUE);
+  lcd.fillScreen(CL_BLUE);
+  lcd.setTextColor(CL_WHITE, CL_BLUE);
   lcd.setCursor(20, 127, 4);
   lcd.println("FLUSH !!");
-  lcd.setTextColor(WHITE, BLACK);
+  lcd.setTextColor(CL_WHITE, CL_BLACK);
   
   irsendExternal.sendInax(0x5C30CF);
   delay(500);
@@ -274,9 +349,9 @@ void flush() {
     for (int idx = 0; idx < 10; idx++) {
       int r = rand() % 10 + 1;
       int x = rand() % 135;
-      lcd.fillCircle(x, y, r, WHITE);
+      lcd.fillCircle(x, y, r, CL_WHITE);
     }
-    lcd.fillRect(0, y - 11, 135, 2, WHITE);
+    lcd.fillRect(0, y - 11, 135, 2, CL_WHITE);
     delay(5);
   }
   
@@ -302,7 +377,7 @@ void setup() {
   
   // LCD明るさ
   M5.Axp.ScreenBreath(12); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
-  lcd.fillScreen(BLACK);
+  lcd.fillScreen(CL_BLACK);
 
   // 外付け赤外線LEDの初期化
   irsendExternal.begin();
@@ -353,15 +428,32 @@ void loop() {
   M5.Imu.getAccelData(&accX, &accY, &accZ);
 
   // 着座判定
-  //sitOnFlg = digitalRead(PIR_IO);
-  //sitOnFlg = (analogRead(PIR_IO) > 2000);
-  boolean sitOnFlg = (accY < 0.5);  // LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0
+  //sitOnFlg = digitalRead(PIR_IO); // PIR センサーは人の動きがないと検出できないため着座判定には不向き。
+  // accY: (LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0)
+  if (sitOnFlg)
+    sitOnFlg = (accY < 0.55);
+  else
+    sitOnFlg = (accY < 0.45);
 
   // ボタン値取得
   boolean btnA = M5.BtnA.wasPressed();
   boolean btnB = M5.BtnB.wasPressed();
   boolean btnPower = (M5.Axp.GetBtnPress() != 0);
 
+  // 電源関係取得
+  float voltageBat = M5.Axp.GetBatVoltage();
+  float currentBat = M5.Axp.GetBatCurrent();
+  float voltageBus = M5.Axp.GetVBusVoltage();
+  float currentBus = M5.Axp.GetVBusCurrent();
+  Serial.print("Bat(V).  ");
+  Serial.println(voltageBat);
+  Serial.print("Bat(A).  ");
+  Serial.println(currentBat);
+  Serial.print("V-in(V). ");
+  Serial.println(voltageBus);
+  Serial.print("V-in(A). ");
+  Serial.println(currentBus);
+  
   // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
   if (rangefinderUseFlag) {
     uint16_t distance = rangefinder.readRangeContinuousMillimeters();
@@ -495,25 +587,37 @@ void loop() {
     if (timeValue - timeAnime >= 1000) {
       drawAnime();
       timeAnime = timeValue;
+
+    // ステータスバー・加速度の表示
+/*
+      lcd.setTextColor(LIGHTGREY, BLACK);
+      lcd.setCursor(5, 208, 2);
+      lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
+      lcd.setTextColor(CL_WHITE, CL_BLACK);
+*/
+/*
+      int width = 130 * accY;
+      lcd.fillRect(0, 235, width, 5, CL_DARKGREY);
+      lcd.fillRect(width, 235, 130 - width, 5, CL_BLACK);
+*/
+      // ステータスバー・電源関連の情報表示
+      lcd.fillRect(0, 220, 135, 20, CL_DARKGREY);
+      lcd.setTextColor(CL_BLACK, CL_DARKGREY);
+      lcd.setCursor(0, 221, 1);
+      lcd.printf(" Bat. %.2fV %.0fmA ", voltageBat, currentBat);
+      lcd.setCursor(0, 231, 1);
+      if (voltageBus >= 3.0)
+        lcd.printf(" Bus. %.2fV %.0fmA", voltageBus, currentBus);
+      else
+        lcd.print(" Bus. --- V --- mA");
+      lcd.setTextColor(CL_WHITE, CL_BLACK);
     }
-  
-    // 加速度のデバッグ表示
-/*
-    lcd.setTextColor(LIGHTGREY, BLACK);
-    lcd.setCursor(5, 208, 2);
-    lcd.printf("Posture:\n  %+.2f %+.2f %+.2f   ", accX, accY, accZ);
-    lcd.setTextColor(WHITE, BLACK);
-*/
-/*
-    int width = 130 * accY;
-    lcd.fillRect(0, 235, width, 5, DARKGREY);
-    lcd.fillRect(width, 235, 130 - width, 5, BLACK);
-*/
   }
 
   if (displayOnFlag) {
     delay(10);
   } else {
+    //delay(500);
     esp_light_sleep_start();  // 500ms 待つ（ボタン操作性ちょっと悪い）
   }
 }
