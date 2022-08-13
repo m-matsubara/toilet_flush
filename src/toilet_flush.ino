@@ -54,7 +54,7 @@
 //#define DEBUG
 
 // LovyanGFX 使用時定義する
-//#define USE_LOVYANGFX 
+#define USE_LOVYANGFX 
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -217,9 +217,9 @@ void drawAnimeAiMonoEye() {
 //      offsetX = 3;
 //    if (animeCounter % 10 == 9)
 //      offsetX = -7;
-    int16_t edgeColor = CL_RED;
-    int16_t outColor = CL_ORANGE;
-    int16_t inColor = CL_YELLOW;
+    int32_t edgeColor = CL_RED;
+    int32_t outColor = CL_ORANGE;
+    int32_t inColor = CL_YELLOW;
     if (rangefinderUseFlag) {
       edgeColor = CL_NAVY;
       outColor = CL_BLUE;
@@ -248,9 +248,9 @@ void drawAnimeDoubleEye() {
       offsetX = 6;
     if (animeCounter % 12 == 10)
       offsetX = -6;
-    int16_t edgeColor = CL_NAVY;
-    int16_t outColor = CL_WHITE;
-    int16_t inColor = CL_MAROON;
+    int32_t edgeColor = CL_NAVY;
+    int32_t outColor = CL_WHITE;
+    int32_t inColor = CL_MAROON;
     if (rangefinderUseFlag) {
       edgeColor = CL_RED;
       inColor = CL_NAVY;
