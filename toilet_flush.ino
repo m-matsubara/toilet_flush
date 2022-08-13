@@ -47,11 +47,14 @@
  *
  */
 
+// アプリケーション名
+#define APPLICATION_NAME "Toilet flush v0.4"
+
 // デバッグの時定義する
 //#define DEBUG
 
 // LovyanGFX 使用時定義する
-#define USE_LOVYANGFX 
+//#define USE_LOVYANGFX 
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -208,7 +211,7 @@ void initDisplay() {
   lcd.fillRect(0, 0, 135, 18, CL_NAVY);
   lcd.setTextColor(CL_WHITE, CL_NAVY);
   lcd.setCursor(5, 0, 2);
-  lcd.println("Toilet flush v0.3");
+  lcd.println(APPLICATION_NAME);
 
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 }
@@ -231,14 +234,14 @@ void drawAnimeAiMonoEye() {
       inColor = CL_CYAN;
     }
     if (animeCounter % 2 == 0) {
-      lcd.fillCircle(66, 160, 33, CL_BLACK);
-      lcd.fillCircle(66, 160, 30, edgeColor);
-      lcd.fillCircle(66, 160, 29, outColor);
-      lcd.fillCircle(66 + offsetX, 160, 15, inColor);
+      lcd.fillEllipse(66, 160, 33, 33 * 1.05, CL_BLACK);
+      lcd.fillEllipse(66, 160, 30, 30 * 1.05, edgeColor);
+      lcd.fillEllipse(66, 160, 29, 29 * 1.05, outColor);
+      lcd.fillEllipse(66 + offsetX, 160, 15, 15 * 1.05, inColor);
     } else {
-      lcd.fillCircle(66, 160, 33, edgeColor);
-      lcd.fillCircle(66, 160, 32, outColor);
-      lcd.fillCircle(66 + offsetX, 160, 12, inColor);
+      lcd.fillEllipse(66, 160, 33, 33 * 1.05, edgeColor);
+      lcd.fillEllipse(66, 160, 32, 32 * 1.05, outColor);
+      lcd.fillEllipse(66 + offsetX, 160, 12, 12 * 1.05, inColor);
     }
     animeCounter++;
 }
@@ -286,9 +289,8 @@ void displaySplash() {
   initDisplay();
 
   lcd.setCursor(5, 20, 4);
-  lcd.println("Welcome");
-  lcd.println("          to");
-  lcd.println("        toilet");
+  lcd.println("Hello");
+  lcd.println("          toilet");
 
   for (int idx = 0; idx < 4; idx++) {
     drawAnime();
@@ -335,8 +337,8 @@ void flush() {
   displayOn();
   // CPU の速度が10Mhzのままだと赤外線が送れない
   setCpuFrequencyMhz(240);
-  lcd.fillScreen(CL_BLUE);
-  lcd.setTextColor(CL_WHITE, CL_BLUE);
+  lcd.fillScreen(CL_LIGHTGREY);
+  lcd.setTextColor(CL_BLUE, CL_LIGHTGREY);
   lcd.setCursor(20, 127, 4);
   lcd.println("FLUSH !!");
   lcd.setTextColor(CL_WHITE, CL_BLACK);
@@ -345,14 +347,19 @@ void flush() {
   delay(500);
   irsendInternal.sendInax(0x5C30CF);
   // 白い泡が下に流れるイメージのアニメーション
-  for (int y = 0; y < 240; y++) {
+  for (int y = -20; y < 240; y++) {
     for (int idx = 0; idx < 10; idx++) {
       int r = rand() % 10 + 1;
       int x = rand() % 135;
-      lcd.fillCircle(x, y, r, CL_WHITE);
+      lcd.fillCircle(x, y + 20, r, CL_WHITE);
     }
-    lcd.fillRect(0, y - 11, 135, 2, CL_WHITE);
-    delay(5);
+    for (int idx = 0; idx < 10; idx++) {
+      int r = rand() % 10 + 1;
+      int x = rand() % 135;
+      lcd.fillCircle(x, y, r, CL_BLUE);
+    }
+    lcd.fillRect(0, y - 11, 135, 2, CL_BLUE);
+    delay(2);
   }
   
   initDisplay();
@@ -431,9 +438,9 @@ void loop() {
   //sitOnFlg = digitalRead(PIR_IO); // PIR センサーは人の動きがないと検出できないため着座判定には不向き。
   // accY: (LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0)
   if (sitOnFlg)
-    sitOnFlg = (accY < 0.55);
+    sitOnFlg = (accY < 0.52);
   else
-    sitOnFlg = (accY < 0.45);
+    sitOnFlg = (accY < 0.48);
 
   // ボタン値取得
   boolean btnA = M5.BtnA.wasPressed();
@@ -556,19 +563,19 @@ void loop() {
     lcd.setCursor(5, 30, 4);
     switch (status) {
     case Status::Waiting:   // 待機中 
-      lcd.print("Waiting      ");
+      lcd.print("Welcome.        ");
       break;
     case Status::SitOn:   // 着座確認（長時間着座待ち）
-      lcd.print("Sit on       ");
+      lcd.print("Sit on          ");
       break;
     case Status::SitOnLong:   // 長時間着座(離席待ち)
-      lcd.print("Sit on *     ");
+      lcd.print("Sit on *        ");
       break;
     case Status::Countdown:   // カウントダウン
-      lcd.print("Cnt-dwn      ");
+      lcd.print("Cnt-dwn         ");
       break;
     case Status::ManualCountdown:   // 手動カウントダウン
-      lcd.print("Cnt-dwn      ");
+      lcd.print("Cnt-dwn         ");
       break;
     }
   
@@ -601,15 +608,33 @@ void loop() {
       lcd.fillRect(width, 235, 130 - width, 5, CL_BLACK);
 */
       // ステータスバー・電源関連の情報表示
-      lcd.fillRect(0, 220, 135, 20, CL_DARKGREY);
-      lcd.setTextColor(CL_BLACK, CL_DARKGREY);
-      lcd.setCursor(0, 221, 1);
-      lcd.printf(" Bat. %.2fV %.0fmA ", voltageBat, currentBat);
-      lcd.setCursor(0, 231, 1);
-      if (voltageBus >= 3.0)
-        lcd.printf(" Bus. %.2fV %.0fmA", voltageBus, currentBus);
-      else
-        lcd.print(" Bus. --- V --- mA");
+      lcd.fillRect(0, 220, 135, 20, CL_NAVY);
+      int xIcon = 5;
+      int yIcon = 220;
+      lcd.setTextColor(CL_LIGHTGREY, CL_NAVY);
+      lcd.setCursor(42, 226, 1);
+      if (voltageBus >= 3.0) {
+        // 外部電源（コンセントのアイコン）
+        lcd.fillRect(xIcon + 4, yIcon + 10, 6, 2, CL_DARKGREEN);
+        lcd.fillCircle(xIcon + 16, yIcon + 10, 6, CL_DARKGREEN);
+        lcd.fillRect(xIcon + 17, yIcon +  4, 6, 13, CL_DARKGREEN);
+        lcd.drawLine(xIcon + 22, yIcon +  7, xIcon + 28, yIcon +  7, CL_DARKGREEN);
+        lcd.drawLine(xIcon + 22, yIcon + 13, xIcon + 28, yIcon + 13, CL_DARKGREEN);
+        
+        lcd.printf(" %.2fV %.0fmA", voltageBus, currentBus);
+      } else {
+        // 内部電源（電池のアイコン）
+        lcd.drawRect(xIcon +  4, yIcon +  4, 21, 12, CL_DARKGREEN);
+        lcd.fillRect(xIcon + 25, yIcon +  7,  3,  6, CL_DARKGREEN);
+        if (voltageBat >= 3.9)
+          lcd.fillRect(xIcon +  6, yIcon +  6, 5, 8, CL_DARKGREEN);
+        if (voltageBat >= 3.7)
+          lcd.fillRect(xIcon +  12, yIcon +  6, 5, 8, CL_DARKGREEN);
+        if (voltageBat >= 3.5)
+          lcd.fillRect(xIcon +  18, yIcon +  6, 5, 8, CL_DARKGREEN);
+        
+        lcd.printf("%.2fV %.0fmA ", voltageBat, currentBat * -1.0);
+      }
       lcd.setTextColor(CL_WHITE, CL_BLACK);
     }
   }
