@@ -82,8 +82,10 @@
 
 
 // 赤外線LED接続端子定数
-const uint16_t IR_LED_INTERNAL = 9;  // 内蔵赤外線 LED
 const uint16_t IR_LED_EXTERNAL = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
+const boolean  IR_LED_EXTERNAL_INVERTED = false; // M5Stack用赤外線送受信ユニット(GROVE互換端子)は、1出力で点灯
+const uint16_t IR_LED_INTERNAL = 9;  // 内蔵赤外線 LED
+const boolean  IR_LED_INTERNAL_INVERTED = true; // 内蔵赤外線 LED は、0出力で点灯
 
 // PIR HAT 接続端子定数
 const uint16_t PIR = 36;  // 人感センサー
@@ -157,10 +159,10 @@ const int DISPLAY_TIMER = COUNTDOWN_TIMER;
 
 // 赤外線送信クラス
 #ifdef USE_EXTERNAL_IR_LED
-IRsend irsendExternal(IR_LED_EXTERNAL); // M5Stack用赤外線送受信ユニット(GROVE互換端子)
+IRsend irsendExternal(IR_LED_EXTERNAL, IR_LED_EXTERNAL_INVERTED); // M5Stack用赤外線送受信ユニット(GROVE互換端子)
 #endif
 #ifdef USE_INTERNAL_IR_LED
-IRsend irsendInternal(IR_LED_INTERNAL); // 内蔵赤外線 LED
+IRsend irsendInternal(IR_LED_INTERNAL, IR_LED_INTERNAL_INVERTED); // 内蔵赤外線 LED
 #endif
 
 // 距離計(ToFセンサー)
