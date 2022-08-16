@@ -48,7 +48,7 @@
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush v0.4"
+#define APPLICATION_NAME "Toilet flush v1.0"
 
 // デバッグの時定義する
 //#define DEBUG
@@ -62,6 +62,10 @@
 // 内蔵赤外線LEDを使用する時定義する
 //#define USE_INTERNAL_IR_LED
 
+
+// 流すコマンド
+#define FLUSH_COMMAND 0x5C30CF		// INAX ながす（大）コマンド
+//#define FLUSH_COMMAND 0x5C32CD	// INAX ながす（小）コマンド
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -353,11 +357,11 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  irsendExternal.sendInax(0x5C30CF);
+  irsendExternal.sendInax(FLUSH_COMMAND);
 #endif
   delay(500);
 #ifdef USE_INTERNAL_IR_LED
-  irsendInternal.sendInax(0x5C30CF);
+  irsendInternal.sendInax(FLUSH_COMMAND);
 #endif
 
   // 白い泡が下に流れるイメージのアニメーション
@@ -406,7 +410,7 @@ void setup() {
 #endif
   
   // LCD明るさ
-  M5.Axp.ScreenBreath(12); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
+  M5.Axp.ScreenBreath(10); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
   lcd.fillScreen(CL_BLACK);
 
   // 外付け赤外線LEDの初期化
@@ -631,7 +635,7 @@ void loop() {
     }
   
     // アニメーション
-    if (timeValue - timeAnime >= 1000) {
+    if (displayOnFlag && (timeValue - timeAnime >= 1000)) {
       drawAnime();
       timeAnime = timeValue;
 
