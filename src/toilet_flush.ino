@@ -209,6 +209,9 @@ int animeCounter = 0;
 // アニメーションタイマー
 uint32_t timeAnime = 0;
 
+// ToFセンサーの検出距離
+uint16_t distanceToF = 0;
+
 
 /**
  * 画面初期化
@@ -305,10 +308,15 @@ void displaySplash() {
   lcd.println("Hello");
   lcd.println("          toilet");
 
+  lcd.setCursor(5, 208, 2);
+  lcd.println("Copyright (C)");
+  lcd.println("  2022 m.matsubara");
+
   for (int idx = 0; idx < 4; idx++) {
     drawAnime();
     delay(1000);
   }
+
   animeCounter = 0;
 }
 
@@ -500,21 +508,10 @@ void loop() {
   // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
   if (rangefinderUseFlag) {
     uint16_t distance = rangefinder.readRangeContinuousMillimeters();
-#ifdef DEBUG
-    //Serial.print("distance: ");
-    //Serial.println(distance);
-#endif  
-    if ((accY > 0.75) && (distance <= 200)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
+    if ((accY > 0.75) && (distance <= 200 && distanceToF > 220)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
       btnA = true;
-      do {
-        distance = rangefinder.readRangeContinuousMillimeters();
-#ifdef DEBUG
-        //Serial.print("distance: ");
-        //Serial.println(distance);
-#endif  
-        delay(10);
-      } while (distance < 250);
     }
+    distanceToF = distance;
   }
 
   // 人感センサによるディスプレイON判定
