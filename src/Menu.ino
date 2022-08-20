@@ -1,5 +1,6 @@
 #include <string>
 #include <M5StickCPlus.h>
+#include "lcd.h"
 #include "Menu.h"
 
 
@@ -8,11 +9,6 @@ void Menu::setValue(const char * value) {
         MenuItem *pMenuItem = this->getMenuItem(idx);
         if (strcmp(value, pMenuItem->getValue()) == 0) {
             this->selectedIdx = idx;
-Serial.print("select menu index: [");
-Serial.print(this->selectedIdx);
-Serial.print("] : ");
-Serial.println(value);
-
             break;
         }
 
@@ -60,30 +56,31 @@ bool MenuSet::loop() {
 
  // メニューの描画
  void MenuSet::draw() {
-    M5.Lcd.fillScreen(BLACK);
+    lcd.fillScreen(CL_BLACK);
 
     Menu *pMenu = this->menuList[this->menuIdx];
-    M5.Lcd.setTextColor(WHITE, BLACK);
-    M5.Lcd.setCursor(3, 0, 2);
-    M5.Lcd.printf("Menu (%u/%u)\n", this->menuIdx + 1, this->menuList.size());
-    M5.Lcd.setCursor(10, 18, 2);
-    M5.Lcd.println(pMenu->getTitle());
+    lcd.fillRect(0, 0, 135, 16, CL_NAVY);
+    lcd.setTextColor(WHITE, CL_NAVY);
+    lcd.setCursor(5, 0, 2);
+    lcd.printf("Menu (%u/%u)\n", this->menuIdx + 1, this->menuList.size());
+    lcd.setTextColor(CL_WHITE, CL_BLACK);
+    lcd.setCursor(10, 18, 2);
+    lcd.println(pMenu->getTitle());
 
     int y = 45;
     for (size_t idx = 0; idx < pMenu->getSize(); idx++) {
         MenuItem *pMenuItem = pMenu->getMenuItem(idx);
-        M5.Lcd.setCursor(15, y, 2);
+        lcd.setCursor(20, y, 2);
         if (idx == pMenu->getSelectedIdx()) {
-          M5.Lcd.fillRect(15, y, 110, 18, WHITE);
-          M5.Lcd.setTextColor(BLACK, WHITE);
+          lcd.fillRect(15, y, 110, 18, CL_WHITE);
+          lcd.setTextColor(CL_BLACK, CL_WHITE);
         } else {
-          M5.Lcd.setTextColor(WHITE, BLACK);
+          lcd.setTextColor(CL_WHITE, CL_BLACK);
         }
-        M5.Lcd.println(pMenuItem->getCaption());
+        lcd.println(pMenuItem->getCaption());
         y += 18;
     }
-    M5.Lcd.drawRoundRect(10, 40, 120, pMenu->getSize() * 18 + 10, 3, WHITE);
-
+    lcd.drawRoundRect(10, 40, 120, pMenu->getSize() * 18 + 10, 3, CL_WHITE);
 }
 
 bool MenuSet::start() {
