@@ -47,6 +47,10 @@ bool MenuSet::loop() {
             return false;   // メニュー終了
         }
         draw();
+    } else if (M5.Axp.GetBtnPress() != 0) {
+        // 電源ボタンを押すと（6秒未満）リセット
+        lcd.fillScreen(BLACK);
+        esp_restart();
     }
         
     delay(10);
