@@ -53,6 +53,9 @@
 // デバッグの時定義する
 //#define DEBUG
 
+// NVS領域をクリアする時定義する
+//#define ERASE_NVS
+
 // LovyanGFX 使用時定義する
 //#define USE_LOVYANGFX 
 
@@ -74,6 +77,11 @@
 #include <IRsend.h>
 #include <VL53L0X.h>
 #include <Wire.h>
+#include <Preferences.h>
+
+#ifdef ERASE_NVS
+#include <nvs_flash.h>
+#endif
 
 // LovyanGFX の設定
 #ifdef USE_LOVYANGFX
@@ -84,6 +92,8 @@
 #include <LGFX_AUTODETECT.hpp>
 #endif
 
+#include "Menu.h"
+
 
 // 赤外線LED接続端子定数
 const uint16_t IR_LED_EXTERNAL = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
@@ -93,15 +103,6 @@ const boolean  IR_LED_INTERNAL_INVERTED = true; // 内蔵赤外線 LED は、0�
 
 // PIR HAT 接続端子定数
 const uint16_t PIR = 36;  // 人感センサー
-
-// 定数
-#ifdef DEBUG
-const int SITDOWN_TIMER   = 6000; // 長時間着座タイマー(ms)
-const int COUNTDOWN_TIMER = 12000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
-#else
-const int SITDOWN_TIMER   = 60000; // 長時間着座タイマー(ms)
-const int COUNTDOWN_TIMER = 120000; // カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
-#endif
 
 #ifdef USE_LOVYANGFX
 // 色定義
@@ -158,9 +159,6 @@ const int32_t CL_SKYBLUE     = 0x015C;
 const int32_t CL_VIOLET      = 0x0120;
 #endif
 
-// 人感センサー検知後のディスプレイ点灯時間(ms)
-const int DISPLAY_TIMER = COUNTDOWN_TIMER;
-
 // 赤外線送信クラス
 #ifdef USE_EXTERNAL_IR_LED
 IRsend irsendExternal(IR_LED_EXTERNAL, IR_LED_EXTERNAL_INVERTED); // M5Stack用赤外線送受信ユニット(GROVE互換端子)
@@ -179,6 +177,19 @@ static LGFX lcd;
 #undef lcd // M5StickCPlus.h で定義されている
 #define lcd M5.Lcd
 #endif
+
+// メニュー
+MenuSet menuSet;
+Menu sitonThresholdMenu("Sit-on threshold");
+Menu countdownTimerMenu("Countdown Timer");
+Menu characterMenu("Character");
+
+// 設定値・長時間着座タイマー(ms)
+int32_t sitonThreshold   = 60000;
+// 設定値・カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
+int32_t countdownTimer = 120000; 
+// 設定値・キャラクタインデックス
+int32_t characterIndex = 0;
 
 // loop処理の時刻（loop()関数の中で更新）
 uint32_t timeValue = millis();
@@ -212,6 +223,33 @@ uint32_t timeAnime = 0;
 // ToFセンサーの検出距離
 uint16_t distanceToF = 0;
 
+/**
+ * 設定を読み込む
+ */ 
+void loadSetting() {
+/*
+  Preferences pref;
+  pref.begin("toilet_flush", false);
+  characterIndex = pref.getInt("characterIndex", 0);
+  sitonThreshold = pref.getInt("sitonThreshold", 60000);
+  countdownTimer = pref.getInt("countdownTimer", 90000);
+  pref.end();
+*/
+}
+
+/**
+ * 設定を保存する。
+ */ 
+void saveSetting() {
+  Preferences pref;
+  pref.begin("toilet_flush", false);
+//pref.clear();
+  pref.putInt("characterIndex", characterIndex);
+  pref.putInt("sitonThreshold", sitonThreshold);
+  pref.putInt("countdownTimer", countdownTimer);
+  pref.end();
+}
+
 
 /**
  * 画面初期化
@@ -219,7 +257,7 @@ uint16_t distanceToF = 0;
 void initDisplay() {
   // 解像度：135x240
   //lcd.setRotation(2);
-  lcd.fillScreen(BLACK);
+  lcd.fillScreen(CL_BLACK);
 
   lcd.fillRect(0, 0, 135, 18, CL_NAVY);
   lcd.setTextColor(CL_WHITE, CL_NAVY);
@@ -244,7 +282,7 @@ void drawAnimeAiMonoEye() {
     int32_t edgeColor = CL_RED;
     int32_t outColor = CL_ORANGE;
     int32_t inColor = CL_YELLOW;
-    if (rangefinderUseFlag) {
+    if (characterIndex == 1) {
       edgeColor = CL_NAVY;
       outColor = CL_BLUE;
       inColor = CL_CYAN;
@@ -266,7 +304,7 @@ void drawAnimeAiMonoEye() {
 /**
  * アニメーションのキャラクタ表示（アニメ風の両目）
  */
-void drawAnimeDoubleEye() {
+void drawAnimeBothEyes() {
     int offsetX = 0;
     if (animeCounter % 12 == 8)
       offsetX = 6;
@@ -294,8 +332,15 @@ void drawAnimeDoubleEye() {
 }
 
 void drawAnime() {
-  drawAnimeAiMonoEye();
-  //drawAnimeDoubleEye();
+  switch (characterIndex) {
+    case 0:
+    case 1:
+      drawAnimeAiMonoEye();
+      break;
+    case 2:
+      drawAnimeBothEyes();
+      break;
+  }
 }
 
 /**
@@ -391,8 +436,9 @@ void flush() {
   initDisplay();
 
   // CPU速度を戻す
-  if (displayOnFlag == false)
+  if (displayOnFlag == false) {
     setCpuFrequencyMhz(10);
+  }
 }
 
 
@@ -406,8 +452,17 @@ void changeStatus(Status newStatus) {
 
 
 void setup() {
+#ifdef ERASE_NVS
+  nvs_flash_erase(); // erase the NVS partition and...
+  nvs_flash_init(); // initialize the NVS partition.
+  while(true);
+#endif
+
   // M5初期化
   M5.begin();
+
+  // 設定値の読み込み
+  loadSetting();
 
   // 500000us = 500msのスリープタイマー設定
   esp_sleep_enable_timer_wakeup(500000);
@@ -460,12 +515,44 @@ void setup() {
   displaySplash();
   initDisplay();
   displayOff();
-  
+
+  sitonThresholdMenu.addMenuItem("30 s", "30000");
+  sitonThresholdMenu.addMenuItem("60 s", "60000");
+  sitonThresholdMenu.addMenuItem("90 s", "90000");
+  sitonThresholdMenu.addMenuItem("120 s", "120000");
+  sitonThresholdMenu.addMenuItem("150 s", "150000");
+  sitonThresholdMenu.addMenuItem("180 s", "180000");
+  menuSet.addMenu(&sitonThresholdMenu);
+  countdownTimerMenu.addMenuItem("30 s", "30000");
+  countdownTimerMenu.addMenuItem("60 s", "60000");
+  countdownTimerMenu.addMenuItem("90 s", "90000");
+  countdownTimerMenu.addMenuItem("120 s", "120000");
+  countdownTimerMenu.addMenuItem("150 s", "150000");
+  countdownTimerMenu.addMenuItem("180 s", "180000");
+  menuSet.addMenu(&countdownTimerMenu);
+  characterMenu.addMenuItem("Mono-eye", "0");
+  characterMenu.addMenuItem("Mono-eye(Blue)", "1");
+  characterMenu.addMenuItem("Both-eyes", "2");
+  menuSet.addMenu(&characterMenu);
+
   // CPUスピードを10MHzに変更
   setCpuFrequencyMhz(10);
 }
 
 void loop() {
+  if (menuSet.isStarted()) {
+    if (menuSet.loop() == false) {
+      // メニュー終了
+      initDisplay();
+      sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
+      countdownTimer = atoi(countdownTimerMenu.getValue()); 
+      characterIndex = atoi(characterMenu.getValue()); 
+      saveSetting();
+    } else {
+      // メニュー継続
+      return;
+    }
+  }
   // 処理時刻の更新
   timeValue = millis();
 
@@ -523,7 +610,7 @@ void loop() {
 
   // ディスプレイ消灯判定
   if (displayOnFlag && status == Status::Waiting) {
-    if (timeValue - timeDisplayOn > DISPLAY_TIMER) {
+    if (timeValue - timeDisplayOn > 30000) {
       displayOff();
     }
   }
@@ -541,10 +628,16 @@ void loop() {
     }
   }
   if (btnB) {
-    // B ボタンが押されたら、即時トイレフラッシュ
-    displayOn();
-    flush();
-    changeStatus(Status::Waiting);
+    // B ボタンが押されたら、メニュー表示
+    char buff[10];
+    itoa(sitonThreshold, buff, 10);
+    sitonThresholdMenu.setValue(buff);
+    itoa(countdownTimer, buff, 10);
+    countdownTimerMenu.setValue(buff);
+    itoa(characterIndex, buff, 10);
+    characterMenu.setValue(buff);
+    menuSet.start();
+    return;
   }
   if (btnPower) {
     // 電源ボタンを押すと（6秒未満）リセット
@@ -562,7 +655,7 @@ void loop() {
   case Status::SitOn:   // 着座確認（長時間着座待ち）
     if (sitOnFlg == false) {
       changeStatus(Status::Waiting);
-    } else if (timeValue - timeChangeStatus >= SITDOWN_TIMER) {
+    } else if (timeValue - timeChangeStatus >= sitonThreshold) {
       changeStatus(Status::SitOnLong);
     }
     break;
@@ -580,7 +673,7 @@ void loop() {
 #endif
     if (sitOnFlg) {
       changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
-    } else if (timeValue - timeChangeStatus >= COUNTDOWN_TIMER) {
+    } else if (timeValue - timeChangeStatus >= countdownTimer) {
       flush();
       changeStatus(Status::Waiting);
     }
@@ -592,7 +685,7 @@ void loop() {
     Serial.print(", timeChangeStatus: ");
     Serial.println(timeChangeStatus);
 #endif
-    if (timeValue - timeChangeStatus >= COUNTDOWN_TIMER) {
+    if (timeValue - timeChangeStatus >= countdownTimer) {
       flush();
       changeStatus(Status::Waiting);
     }
@@ -623,7 +716,7 @@ void loop() {
     // カウントダウンタイマー表示
     lcd.setCursor(20, 60, 7);
     if (status == Status::Countdown || status == Status::ManualCountdown) {
-      int secTime = (COUNTDOWN_TIMER - (timeValue - timeChangeStatus)) / 1000;
+      int secTime = (countdownTimer - (timeValue - timeChangeStatus)) / 1000;
       if (secTime < 0)
         secTime = 0;  // タイミングによってはマイナスになってしまうこともある
       lcd.printf("%.03d", secTime);
