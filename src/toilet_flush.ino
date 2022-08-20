@@ -152,25 +152,26 @@ uint32_t timeAnime = 0;
 // ToFセンサーの検出距離
 uint16_t distanceToF = 0;
 
+Preferences pref;
+
 /**
  * 設定を読み込む
  */ 
 void loadSetting() {
-/*
-  Preferences pref;
+  // 2022/08/20 現在、PlatformIO では platformio.ini に以下の記述がないと Preferences クラスが正しく動作しない
+  // platform = https://github.com/tasmota/platform-espressif32/releases/download/v2.0.2idf/platform-espressif32-2.0.2.zip
+
   pref.begin("toilet_flush", false);
   characterIndex = pref.getInt("characterIndex", 0);
   sitonThreshold = pref.getInt("sitonThreshold", 60000);
   countdownTimer = pref.getInt("countdownTimer", 90000);
   pref.end();
-*/
 }
 
 /**
  * 設定を保存する。
  */ 
 void saveSetting() {
-  Preferences pref;
   pref.begin("toilet_flush", false);
 //pref.clear();
   pref.putInt("characterIndex", characterIndex);
@@ -565,6 +566,7 @@ void loop() {
     countdownTimerMenu.setValue(buff);
     itoa(characterIndex, buff, 10);
     characterMenu.setValue(buff);
+    displayOn();
     menuSet.start();
     return;
   }
