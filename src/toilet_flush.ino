@@ -319,9 +319,20 @@ void displaySplash() {
   lcd.println("Copyright (C)");
   lcd.println("  2022 m.matsubara");
 
-  for (int idx = 0; idx < 4; idx++) {
-    drawAnime();
-    delay(1000);
+  // アニメーションと起動音
+  // 起動音は、最初の `M5.Beep.tone(2000)` の呼び出しでなぜか音が出ないので、10ms後にもう一度音を出している。
+  for (int idx = 0; idx < 400; idx++) {
+    if (idx % 100 == 0)
+      drawAnime();
+    if (idx == 0)
+      M5.Beep.tone(2000); // 起動時１回目の音はなぜか出ない
+    else if (idx == 1)
+      M5.Beep.tone(2000); // ピ (120ms)
+    else if (idx == 13)
+      M5.Beep.tone(1000); // ポッ (120ms)
+    else if (idx == 25)
+      M5.Beep.mute();     // 消音
+    delay(10);
   }
 
   animeCounter = 0;
