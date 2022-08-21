@@ -82,14 +82,16 @@
 #include <VL53L0X.h>
 #include <Wire.h>
 #include <Preferences.h>
-
-#ifdef ERASE_NVS
 #include <nvs_flash.h>
-#endif
 
 #include "lcd.h"
 #include "Menu.h"
 
+// キャラクタ名の一覧
+const String CHARACTER_NAME_NONE = "None";
+const String CHARACTER_NAME_MONO_EYE_ORANGE = "Mono-eye(Orange)";
+const String CHARACTER_NAME_MONO_EYE_BLUE = "Mono-eye(Blue)";
+const String CHARACTER_NAME_BOTH_EYES = "Both-eyes";
 
 // 赤外線LED接続端子
 const uint16_t IR_LED_EXTERNAL = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
@@ -135,7 +137,7 @@ int32_t sitonThreshold   = 60000;
 // 設定値・カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
 int32_t countdownTimer = 120000; 
 // 設定値・キャラクタインデックス
-int32_t characterIndex = 0;
+String characterName = CHARACTER_NAME_MONO_EYE_ORANGE;
 // 設定値・LCD明るさ
 int32_t lcdBrightness = 8;
 
@@ -189,7 +191,7 @@ void loadSetting() {
   // メニューにより設定される項目
   sitonThreshold = pref.getInt("sitonThreshold", 60000);
   countdownTimer = pref.getInt("countdownTimer", 90000);
-  characterIndex = pref.getInt("characterIndex", 0);
+  characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
   lcdBrightness  = pref.getInt("lcdBrightness", 10);
 
   // 以下３つは赤外線受信モードで設定される項目
@@ -207,7 +209,7 @@ void saveSetting() {
   pref.begin("toilet_flush", false);
   pref.putInt("sitonThreshold", sitonThreshold);
   pref.putInt("countdownTimer", countdownTimer);
-  pref.putInt("characterIndex", characterIndex);
+  pref.putString("characterName", characterName);
   pref.putInt("lcdBrightness",  lcdBrightness);
   pref.end();
 }
@@ -244,7 +246,7 @@ void drawAnimeAiMonoEye() {
     int32_t edgeColor = CL_RED;
     int32_t outColor = CL_ORANGE;
     int32_t inColor = CL_YELLOW;
-    if (characterIndex == 1) {
+    if (characterName == CHARACTER_NAME_MONO_EYE_BLUE) {
       edgeColor = CL_NAVY;
       outColor = CL_BLUE;
       inColor = CL_CYAN;
@@ -294,19 +296,17 @@ void drawAnimeBothEyes() {
 }
 
 void drawAnime() {
-  switch (characterIndex) {
-    case 0:
-    case 1:
-      drawAnimeAiMonoEye();
-      break;
-    case 2:
-      drawAnimeBothEyes();
-      break;
+  if ((characterName == CHARACTER_NAME_MONO_EYE_ORANGE) || (characterName == CHARACTER_NAME_MONO_EYE_BLUE)) {
+    drawAnimeAiMonoEye();
+  } else if (characterName == CHARACTER_NAME_BOTH_EYES) {
+    drawAnimeBothEyes();
+  } else {
+    // CHARACTER_NAME_NONE
   }
 }
 
 /**
- * スプラッシュ画面
+ * スプラッシュ画面（起動音つき）
  */
 void displaySplash() {
   initDisplay();
@@ -331,6 +331,7 @@ void displaySplash() {
  * ディスプレイON
  */
 void displayOn() {
+  boolean prevDisplayOnFlag = displayOnFlag;
   displayOnFlag = true;
   M5.Axp.SetLDO2(displayOnFlag);
   timeDisplayOn = timeValue;
@@ -497,16 +498,14 @@ void irRecvLoop() {
 
 
 void setup() {
-#ifdef ERASE_NVS
-  nvs_flash_erase(); // erase the NVS partition and...
-  nvs_flash_init(); // initialize the NVS partition.
-  while(true);
-#endif
-
   // M5初期化
   M5.begin();
   if (M5.BtnA.isPressed()) {
     isIRReceiveMode = true;
+  }
+  if (M5.BtnB.isPressed()) {
+    nvs_flash_erase(); // erase the NVS partition and...
+    nvs_flash_init(); // initialize the NVS partition.
   }
 
   // 設定値の読み込み
@@ -569,9 +568,10 @@ void setup() {
   countdownTimerMenu.addMenuItem("150 s", "150000");
   countdownTimerMenu.addMenuItem("180 s", "180000");
   menuSet.addMenu(&countdownTimerMenu);
-  characterMenu.addMenuItem("Mono-eye", "0");
-  characterMenu.addMenuItem("Mono-eye(Blue)", "1");
-  characterMenu.addMenuItem("Both-eyes", "2");
+  characterMenu.addMenuItem("None",           CHARACTER_NAME_NONE.c_str());
+  characterMenu.addMenuItem("Mono-eye",       CHARACTER_NAME_MONO_EYE_ORANGE.c_str());
+  characterMenu.addMenuItem("Mono-eye(Blue)", CHARACTER_NAME_MONO_EYE_BLUE.c_str());
+  characterMenu.addMenuItem("Both-eyes",      CHARACTER_NAME_BOTH_EYES.c_str());
   menuSet.addMenu(&characterMenu);
   lcdBrightnessMenu.addMenuItem("Dark", "8");
   //lcdBrightnessMenu.addMenuItem("Slightly dark", "9");
@@ -612,7 +612,7 @@ void loop() {
       initDisplay();
       sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
       countdownTimer = atoi(countdownTimerMenu.getValue()); 
-      characterIndex = atoi(characterMenu.getValue()); 
+      characterName = characterMenu.getValue(); 
       lcdBrightness  = atoi(lcdBrightnessMenu.getValue()); 
       // メニュー終了と同時に設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
       saveSetting();
@@ -703,8 +703,7 @@ void loop() {
     sitonThresholdMenu.setValue(buff);
     itoa(countdownTimer, buff, 10);
     countdownTimerMenu.setValue(buff);
-    itoa(characterIndex, buff, 10);
-    characterMenu.setValue(buff);
+    characterMenu.setValue(characterName.c_str());
     itoa(lcdBrightness, buff, 10);
     lcdBrightnessMenu.setValue(buff);
     displayOn();
