@@ -84,7 +84,7 @@ bool MenuSet::loop() {
         lcd.println(pMenuItem->getCaption());
         y += 18;
     }
-    lcd.drawRoundRect(10, 40, 120, pMenu->getSize() * 18 + 10, 3, CL_WHITE);
+    lcd.drawRoundRect(10, 40, 120, pMenu->getSize() * 18 + 10, 6, CL_WHITE);
 }
 
 bool MenuSet::start() {

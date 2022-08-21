@@ -128,6 +128,7 @@ MenuSet menuSet;
 Menu sitonThresholdMenu("Sit-on threshold");
 Menu countdownTimerMenu("Countdown Timer");
 Menu characterMenu("Character");
+Menu lcdBrightnessMenu("LCD Brightness");
 
 // 設定値・長時間着座タイマー(ms)
 int32_t sitonThreshold   = 60000;
@@ -135,6 +136,8 @@ int32_t sitonThreshold   = 60000;
 int32_t countdownTimer = 120000; 
 // 設定値・キャラクタインデックス
 int32_t characterIndex = 0;
+// 設定値・LCD明るさ
+int32_t lcdBrightness = 8;
 
 // loop処理の時刻（loop()関数の中で更新）
 uint32_t timeValue = millis();
@@ -187,6 +190,7 @@ void loadSetting() {
   sitonThreshold = pref.getInt("sitonThreshold", 60000);
   countdownTimer = pref.getInt("countdownTimer", 90000);
   characterIndex = pref.getInt("characterIndex", 0);
+  lcdBrightness  = pref.getInt("lcdBrightness", 10);
 
   // 以下３つは赤外線受信モードで設定される項目
   irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
@@ -201,10 +205,10 @@ void loadSetting() {
  */ 
 void saveSetting() {
   pref.begin("toilet_flush", false);
-
   pref.putInt("sitonThreshold", sitonThreshold);
   pref.putInt("countdownTimer", countdownTimer);
   pref.putInt("characterIndex", characterIndex);
+  pref.putInt("lcdBrightness",  lcdBrightness);
   pref.end();
 }
 
@@ -330,6 +334,9 @@ void displayOn() {
   displayOnFlag = true;
   M5.Axp.SetLDO2(displayOnFlag);
   timeDisplayOn = timeValue;
+
+  // LCD明るさ
+  M5.Axp.ScreenBreath(lcdBrightness); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
 
   // CPU速度を240Mhzに変更
   setCpuFrequencyMhz(240);
@@ -513,10 +520,6 @@ void setup() {
   lcd.setBrightness(200);
 #endif
   
-  // LCD明るさ
-  M5.Axp.ScreenBreath(10); // 6より下はかなり見づらく、消費電力もあまり落ちないらしい
-  lcd.fillScreen(CL_BLACK);
-
   // 外付け赤外線LEDの初期化
 #ifdef USE_EXTERNAL_IR_LED
   irsendExternal.begin();
@@ -570,6 +573,12 @@ void setup() {
   characterMenu.addMenuItem("Mono-eye(Blue)", "1");
   characterMenu.addMenuItem("Both-eyes", "2");
   menuSet.addMenu(&characterMenu);
+  lcdBrightnessMenu.addMenuItem("Dark", "8");
+  //lcdBrightnessMenu.addMenuItem("Slightly dark", "9");
+  lcdBrightnessMenu.addMenuItem("Normal", "10");
+  //lcdBrightnessMenu.addMenuItem("Slightly bright", "11");
+  lcdBrightnessMenu.addMenuItem("Bright", "12");
+  menuSet.addMenu(&lcdBrightnessMenu);
 
   if (isIRReceiveMode == false) {
     // ディスプレイ初期化
@@ -587,6 +596,9 @@ void setup() {
 }
 
 void loop() {
+  // 処理時刻の更新
+  timeValue = millis();
+
   // 赤外線受信モード
   if (isIRReceiveMode) {
     irRecvLoop();
@@ -601,16 +613,17 @@ void loop() {
       sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
       countdownTimer = atoi(countdownTimerMenu.getValue()); 
       characterIndex = atoi(characterMenu.getValue()); 
+      lcdBrightness  = atoi(lcdBrightnessMenu.getValue()); 
       // メニュー終了と同時に設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
       saveSetting();
+
+      // ディスプレイの明るさを設定するために、displayOn() を呼び出す。
+      displayOn();
     } else {
       // メニュー継続
       return;
     }
   }
-
-  // 処理時刻の更新
-  timeValue = millis();
 
   M5.update();
 
@@ -692,6 +705,8 @@ void loop() {
     countdownTimerMenu.setValue(buff);
     itoa(characterIndex, buff, 10);
     characterMenu.setValue(buff);
+    itoa(lcdBrightness, buff, 10);
+    lcdBrightnessMenu.setValue(buff);
     displayOn();
     menuSet.start();
     return;
