@@ -67,14 +67,18 @@
 
 
 // 流すコマンド
-#define FLUSH_COMMAND 0x5C30CF		// INAX ながす（大）コマンド
-//#define FLUSH_COMMAND 0x5C32CD	// INAX ながす（小）コマンド
+#define FLUSH_IR_COMMAND_TYPE decode_type_t::INAX		  // INAX
+#define FLUSH_IR_COMMAND_CODE 0x5C30CF		            // INAX ながす（大）コマンド
+//#define FLUSH_IR_COMMAND_CODE 0x5C32CD	            // INAX ながす（小）コマンド
+#define FLUSH_IR_COMMAND_BITS 24
 
 #include <stdlib.h>
 #include <Arduino.h>
 #include <M5StickCPlus.h>
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
+#include <IRrecv.h>
+#include <IRutils.h>
 #include <VL53L0X.h>
 #include <Wire.h>
 #include <Preferences.h>
@@ -87,11 +91,13 @@
 #include "Menu.h"
 
 
-// 赤外線LED接続端子定数
+// 赤外線LED接続端子
 const uint16_t IR_LED_EXTERNAL = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
 const boolean  IR_LED_EXTERNAL_INVERTED = false; // M5Stack用赤外線送受信ユニット(GROVE互換端子)は、1出力で点灯
 const uint16_t IR_LED_INTERNAL = 9;  // 内蔵赤外線 LED
 const boolean  IR_LED_INTERNAL_INVERTED = true; // 内蔵赤外線 LED は、0出力で点灯
+// 赤外線センサー接続端子
+const uint16_t IR_SENSOR = 33;       // M5Stack用赤外線送受信ユニット(GROVE互換端子)
 
 // PIR HAT 接続端子定数
 const uint16_t PIR = 36;  // 人感センサー
@@ -103,6 +109,16 @@ IRsend irsendExternal(IR_LED_EXTERNAL, IR_LED_EXTERNAL_INVERTED); // M5Stack用�
 #ifdef USE_INTERNAL_IR_LED
 IRsend irsendInternal(IR_LED_INTERNAL, IR_LED_INTERNAL_INVERTED); // 内蔵赤外線 LED
 #endif
+
+// 赤外線受信クラス
+IRrecv irrecv(IR_SENSOR, 1024, 50, true);	// 引数は、IRrecvDumpV2 を参考にした
+// 赤外線受信結果
+decode_results results;
+
+// 赤外線コマンド
+decode_type_t irCommandType = FLUSH_IR_COMMAND_TYPE;
+uint64_t irCommandCode = FLUSH_IR_COMMAND_CODE;
+uint16_t irCommandBits = FLUSH_IR_COMMAND_BITS;
 
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
@@ -152,7 +168,11 @@ uint32_t timeAnime = 0;
 // ToFセンサーの検出距離
 uint16_t distanceToF = 0;
 
+// 設定
 Preferences pref;
+
+// 赤外線受信モード実行中の時
+boolean isIRReceiveMode = false;
 
 /**
  * 設定を読み込む
@@ -162,9 +182,17 @@ void loadSetting() {
   // platform = https://github.com/tasmota/platform-espressif32/releases/download/v2.0.2idf/platform-espressif32-2.0.2.zip
 
   pref.begin("toilet_flush", false);
-  characterIndex = pref.getInt("characterIndex", 0);
+
+  // メニューにより設定される項目
   sitonThreshold = pref.getInt("sitonThreshold", 60000);
   countdownTimer = pref.getInt("countdownTimer", 90000);
+  characterIndex = pref.getInt("characterIndex", 0);
+
+  // 以下３つは赤外線受信モードで設定される項目
+  irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
+  irCommandCode    = pref.getInt("irCommandCode", FLUSH_IR_COMMAND_CODE);
+  irCommandBits    = pref.getInt("irCommandBits", FLUSH_IR_COMMAND_BITS);
+
   pref.end();
 }
 
@@ -173,10 +201,10 @@ void loadSetting() {
  */ 
 void saveSetting() {
   pref.begin("toilet_flush", false);
-//pref.clear();
-  pref.putInt("characterIndex", characterIndex);
+
   pref.putInt("sitonThreshold", sitonThreshold);
   pref.putInt("countdownTimer", countdownTimer);
+  pref.putInt("characterIndex", characterIndex);
   pref.end();
 }
 
@@ -340,11 +368,11 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  irsendExternal.sendInax(FLUSH_COMMAND);
+  irsendExternal.send(irCommandType, irCommandCode, irCommandBits, 1);
 #endif
   delay(500);
 #ifdef USE_INTERNAL_IR_LED
-  irsendInternal.sendInax(FLUSH_COMMAND);
+  irsendInternal.send(irCommandType, irCommandCode, irCommandBits, 1);
 #endif
 
   // 白い泡が下に流れるイメージのアニメーション
@@ -371,13 +399,93 @@ void flush() {
   }
 }
 
-
 // ステータス変更
 void changeStatus(Status newStatus) {
   status = newStatus;
   timeChangeStatus = timeValue;
   if (status != Status::Waiting)
     displayOn();
+}
+
+// 赤外線受信モードでボタン描画
+void irRecvButtonDraw() {
+  lcd.fillRoundRect(90, 140, 40, 20, 5, CL_ORANGE);
+  lcd.drawLine(120, 150, 135, 125, CL_ORANGE);
+  lcd.setTextColor(CL_BLACK, CL_ORANGE);
+  lcd.setCursor(95, 142, 2);
+  lcd.print("Save");
+
+  lcd.fillRoundRect(10, 210, 115, 20, 5, CL_ORANGE);
+  lcd.drawLine(68, 230, 68, 240, CL_ORANGE);
+  lcd.setTextColor(CL_BLACK, CL_ORANGE);
+  lcd.setCursor(40, 210, 2);
+  lcd.print("Send test");
+
+  lcd.setTextColor(CL_WHITE, CL_BLACK);
+}
+
+// 赤外線受信モードの初期化
+void irRecvSetup() {
+  // 赤外線受信のための定数設定(IRrecvDumpV2より取得)
+  irrecv.setUnknownThreshold(12); // この値より短いON/OFFの値を無視する閾値
+  irrecv.setTolerance(25);        // 許容範囲
+  // 受信開始
+  irrecv.enableIRIn();
+
+  lcd.fillRect(0, 20, 135, 40, CL_BLACK);
+  lcd.setTextColor(CL_CYAN, CL_BLACK);
+  lcd.setCursor(5, 20, 2);
+  lcd.print("Send from \n  remote control.");
+
+  irRecvButtonDraw();
+}
+
+// 赤外線受信モードのループ処理
+void irRecvLoop() {
+  M5.update();
+  if (irrecv.decode(&results)) {
+    // 受信したコマンドを解析
+    String typeName = typeToString(results.decode_type, results.repeat);
+    String commandCodeStr = resultToHexidecimal(&results);
+    uint64_t commandCode = strtol(commandCodeStr.c_str() , NULL, 16);
+    if ((results.decode_type != decode_type_t::UNKNOWN) && (commandCode != 0)) {
+      // 受信したコマンドを表示(UNKNOWN でなければ)
+      lcd.fillRect(0, 60, 135, 80, CL_BLACK);
+      irRecvButtonDraw();
+
+      irCommandType = results.decode_type;
+      irCommandCode = commandCode;
+      irCommandBits = results.bits;
+
+      // 受信したコマンドを表示
+      lcd.setCursor(5, 60, 2);
+      lcd.printf("type: %s", typeName.c_str());
+      lcd.setCursor(5, 100, 2);
+      lcd.printf("cmd: %s", commandCodeStr.c_str());
+    }
+  }
+  if (M5.BtnA.wasPressed()) {
+    irrecv.disableIRIn(); // 自身の赤外線コマンドを受信してしまったりするのでいったん無効化
+    lcd.fillCircle(115, 220, 5, CL_RED);
+    irsendExternal.send(irCommandType, irCommandCode, irCommandBits, 1);
+    lcd.fillCircle(115, 220, 5, CL_ORANGE);
+    irrecv.enableIRIn();
+  }
+  if (M5.BtnB.wasPressed()) {
+    // コマンド保存
+    pref.begin("toilet_flush", false);
+    pref.putInt("irCommandType", irCommandType);
+    pref.putInt("irCommandCode", irCommandCode);
+    pref.putInt("irCommandBits", irCommandBits);
+    pref.end();
+    // コマンドの表示を消去
+    lcd.fillRect(0, 60, 135, 80, CL_BLACK);
+    irRecvButtonDraw();
+  }
+  if (M5.Axp.GetBtnPress() != 0) {
+    lcd.fillScreen(BLACK);
+    esp_restart();
+  }
 }
 
 
@@ -390,6 +498,9 @@ void setup() {
 
   // M5初期化
   M5.begin();
+  if (M5.BtnA.isPressed()) {
+    isIRReceiveMode = true;
+  }
 
   // 設定値の読み込み
   loadSetting();
@@ -440,19 +551,14 @@ void setup() {
 
   changeStatus(Status::Waiting);
 
-  // ディスプレイ初期化
-  displayOn();
-  displaySplash();
-  initDisplay();
-  displayOff();
-
+  // メニュー初期化
+  sitonThresholdMenu.addMenuItem("0 s", "0");
   sitonThresholdMenu.addMenuItem("30 s", "30000");
   sitonThresholdMenu.addMenuItem("60 s", "60000");
   sitonThresholdMenu.addMenuItem("90 s", "90000");
   sitonThresholdMenu.addMenuItem("120 s", "120000");
-  sitonThresholdMenu.addMenuItem("150 s", "150000");
-  sitonThresholdMenu.addMenuItem("180 s", "180000");
   menuSet.addMenu(&sitonThresholdMenu);
+  countdownTimerMenu.addMenuItem("0 s", "0");
   countdownTimerMenu.addMenuItem("30 s", "30000");
   countdownTimerMenu.addMenuItem("60 s", "60000");
   countdownTimerMenu.addMenuItem("90 s", "90000");
@@ -465,11 +571,29 @@ void setup() {
   characterMenu.addMenuItem("Both-eyes", "2");
   menuSet.addMenu(&characterMenu);
 
-  // CPUスピードを10MHzに変更
-  setCpuFrequencyMhz(10);
+  if (isIRReceiveMode == false) {
+    // ディスプレイ初期化
+    displayOn();
+    displaySplash();
+    initDisplay();
+    displayOff();
+  } else {
+    // ディスプレイ初期化
+    displayOn();
+    initDisplay();
+    // 赤外線受信モード
+    irRecvSetup();
+  }
 }
 
 void loop() {
+  // 赤外線受信モード
+  if (isIRReceiveMode) {
+    irRecvLoop();
+    return;
+  }
+
+  // メニューの処理
   if (menuSet.isStarted()) {
     if (menuSet.loop() == false) {
       // メニュー終了
@@ -477,12 +601,14 @@ void loop() {
       sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
       countdownTimer = atoi(countdownTimerMenu.getValue()); 
       characterIndex = atoi(characterMenu.getValue()); 
+      // メニュー終了と同時に設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
       saveSetting();
     } else {
       // メニュー継続
       return;
     }
   }
+
   // 処理時刻の更新
   timeValue = millis();
 
