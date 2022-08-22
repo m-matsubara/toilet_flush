@@ -176,7 +176,7 @@ uint16_t distanceToF = 0;
 // 設定
 Preferences pref;
 
-// 赤外線受信モード実行中の時
+// 赤外線コマンド学習モードの時 true
 boolean isIRReceiveMode = false;
 
 /**
@@ -459,7 +459,7 @@ void irRecvSetup() {
   irRecvButtonDraw();
 }
 
-// 赤外線受信モードのループ処理
+// 赤外線コマンド学習モードのループ処理
 void irRecvLoop() {
   M5.update();
   if (irrecv.decode(&results)) {
@@ -512,9 +512,11 @@ void setup() {
   // M5初期化
   M5.begin();
   if (M5.BtnA.isPressed()) {
+    // 赤外線コマンド学習モード
     isIRReceiveMode = true;
   }
   if (M5.BtnB.isPressed()) {
+    // 設定クリア
     nvs_flash_erase(); // erase the NVS partition and...
     nvs_flash_init(); // initialize the NVS partition.
   }
@@ -610,7 +612,7 @@ void loop() {
   // 処理時刻の更新
   timeValue = millis();
 
-  // 赤外線受信モード
+  // 赤外線コマンド学習モード
   if (isIRReceiveMode) {
     irRecvLoop();
     return;
