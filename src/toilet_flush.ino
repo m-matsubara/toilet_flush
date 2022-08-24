@@ -53,9 +53,6 @@
 // デバッグの時定義する
 //#define DEBUG
 
-// NVS領域をクリアする時定義する
-//#define ERASE_NVS
-
 // LovyanGFX 使用時定義する
 //#define USE_LOVYANGFX 
 
@@ -86,6 +83,11 @@
 
 #include "lcd.h"
 #include "Menu.h"
+
+// 設定値・長時間着座タイマー(ms)のデフォルト値
+const int32_t SITON_THRESHOLD_DEFAULT   = 60000;
+// 設定値・カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）のデフォルト値
+const int32_t COUNTDOWN_TIMER_DEFAULT = 120000; 
 
 // キャラクタ名の一覧
 const String CHARACTER_NAME_NONE = "None";
@@ -133,9 +135,9 @@ Menu characterMenu("Character");
 Menu lcdBrightnessMenu("LCD Brightness");
 
 // 設定値・長時間着座タイマー(ms)
-int32_t sitonThreshold   = 60000;
+int32_t sitonThreshold   = SITON_THRESHOLD_DEFAULT;
 // 設定値・カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
-int32_t countdownTimer = 120000; 
+int32_t countdownTimer = COUNTDOWN_TIMER_DEFAULT; 
 // 設定値・キャラクタインデックス
 String characterName = CHARACTER_NAME_MONO_EYE_ORANGE;
 // 設定値・LCD明るさ
@@ -147,14 +149,17 @@ uint32_t timeValue = millis();
 // ステータス
 enum class Status { Waiting, SitOn, SitOnLong, Countdown, ManualCountdown };
 Status status = Status::Waiting;
-// 一部のステータスで使用するステータスが変更された時刻
+// ステータスが変更された時刻
 uint32_t timeChangeStatus = 0;
 
-//　着座判定
+// 着座判定
 boolean sitOnFlg = false;
 
 // ディスプレイを点灯した時刻
 uint32_t timeDisplayOn = 0;
+
+// ボタンAを押下した時刻
+uint32_t timeButtonA = 0;
 
 // 距離計(ToF HAT)を利用するか
 boolean rangefinderUseFlag = false;
@@ -189,8 +194,8 @@ void loadSetting() {
   pref.begin("toilet_flush", false);
 
   // メニューにより設定される項目
-  sitonThreshold = pref.getInt("sitonThreshold", 60000);
-  countdownTimer = pref.getInt("countdownTimer", 90000);
+  sitonThreshold = pref.getInt("sitonThreshold", SITON_THRESHOLD_DEFAULT);
+  countdownTimer = pref.getInt("countdownTimer", COUNTDOWN_TIMER_DEFAULT);
   characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
   lcdBrightness  = pref.getInt("lcdBrightness", 10);
 
@@ -387,11 +392,11 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  irsendExternal.send(irCommandType, irCommandCode, irCommandBits, 1);
+  irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
 #endif
   delay(500);
 #ifdef USE_INTERNAL_IR_LED
-  irsendInternal.send(irCommandType, irCommandCode, irCommandBits, 1);
+  irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
 #endif
 
   // 白い泡が下に流れるイメージのアニメーション
@@ -486,7 +491,13 @@ void irRecvLoop() {
   if (M5.BtnA.wasPressed()) {
     irrecv.disableIRIn(); // 自身の赤外線コマンドを受信してしまったりするのでいったん無効化
     lcd.fillCircle(115, 220, 5, CL_RED);
-    irsendExternal.send(irCommandType, irCommandCode, irCommandBits, 1);
+#ifdef USE_EXTERNAL_IR_LED
+    irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+#endif
+    delay(500);
+#ifdef USE_INTERNAL_IR_LED
+    irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+#endif
     lcd.fillCircle(115, 220, 5, CL_ORANGE);
     irrecv.enableIRIn();
   }
@@ -650,14 +661,24 @@ void loop() {
   //sitOnFlg = digitalRead(PIR_IO); // PIR センサーは人の動きがないと検出できないため着座判定には不向き。
   // accY: (LCDを上に向けた状態で 0.0, USB Type-Cコネクタを下に向けて立てた状態で 1.0)
   if (sitOnFlg)
-    sitOnFlg = (accY < 0.52);
+    sitOnFlg = (accY < 0.53);
   else
-    sitOnFlg = (accY < 0.48);
+    sitOnFlg = (accY < 0.47);
 
   // ボタン値取得
   boolean btnA = M5.BtnA.wasPressed();
   boolean btnB = M5.BtnB.wasPressed();
   boolean btnPower = (M5.Axp.GetBtnPress() != 0);
+  // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
+  if (rangefinderUseFlag) {
+    uint16_t distance = rangefinder.readRangeContinuousMillimeters();
+    if ((accY > 0.75) && (distance <= 200 && distanceToF > 220)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
+      btnA = true;
+    }
+    distanceToF = distance;
+  }
+  if (btnA)
+    timeButtonA = timeValue;
 
   // 電源関係取得
   float voltageBat = M5.Axp.GetBatVoltage();
@@ -674,14 +695,6 @@ void loop() {
   Serial.print("V-in(A). ");
   Serial.println(currentBus);
 #endif  
-  // 距離計をボタンAと同じ扱いにする(本体を立てた状態かつ20cm以下で押下扱い)
-  if (rangefinderUseFlag) {
-    uint16_t distance = rangefinder.readRangeContinuousMillimeters();
-    if ((accY > 0.75) && (distance <= 200 && distanceToF > 220)) {    // sitOnFlg ではなく、(accY > 0.75) で判定するのは、倒し初めで何かに反応するのを避けるため
-      btnA = true;
-    }
-    distanceToF = distance;
-  }
 
   // 人感センサによるディスプレイON判定
   if (pirUseFlag) {
@@ -727,6 +740,12 @@ void loop() {
     // 電源ボタンを押すと（6秒未満）リセット
     lcd.fillScreen(BLACK);
     esp_restart();
+  }
+
+  // ボタンAの長押し
+  if (M5.BtnA.isPressed() && timeValue - timeButtonA >= 2000) {
+    flush();
+    changeStatus(Status::Waiting);
   }
 
   // ステータス判定処理
