@@ -40,12 +40,20 @@ bool MenuSet::loop() {
         draw();
     } else if (M5.BtnB.wasPressed()) {
         // ボタンBで次のメニューへ、最後のメニューの場合は、メニュー終了
+
+        // メニュー選択値が変更されていたら、modified を true にする
+        if (this->prevMenuSelectedIdx != this->menuList[this->menuIdx]->getSelectedIdx())
+            this->modified = true;
+
+        // 次のメニューへ
         this->menuIdx++;
         if (this->menuIdx >= this->menuList.size()) {
             this->menuIdx = 0;
             this->started = false;
             return false;   // メニュー終了
         }
+        // メニューがまだ続くなら、現在のメニュー選択値を保存(変更の判断のために)
+        this->prevMenuSelectedIdx = this->menuList[this->menuIdx]->getSelectedIdx();
         draw();
     } else if (M5.Axp.GetBtnPress() != 0) {
         // 電源ボタンを押すと（6秒未満）リセット
@@ -93,6 +101,8 @@ bool MenuSet::start() {
     }
     this->menuIdx = 0;
     this->started = true;
+    this->prevMenuSelectedIdx = this->menuList[this->menuIdx]->getSelectedIdx();
+    this->modified = false;
     draw();
     return loop();
 }

@@ -634,12 +634,14 @@ void loop() {
     if (menuSet.loop() == false) {
       // メニュー終了
       initDisplay();
-      sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
-      countdownTimer = atoi(countdownTimerMenu.getValue()); 
-      characterName = characterMenu.getValue(); 
-      lcdBrightness  = atoi(lcdBrightnessMenu.getValue()); 
-      // メニュー終了と同時に設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
-      saveSetting();
+      if (menuSet.isModified()) {
+        // なにか変更されていたら、設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
+        sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
+        countdownTimer = atoi(countdownTimerMenu.getValue()); 
+        characterName = characterMenu.getValue(); 
+        lcdBrightness  = atoi(lcdBrightnessMenu.getValue()); 
+        saveSetting();
+      }
 
       // ディスプレイの明るさを設定するために、displayOn() を呼び出す。
       displayOn();
