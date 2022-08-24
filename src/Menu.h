@@ -73,15 +73,20 @@ private:
     std::vector<Menu *>menuList;
     size_t menuIdx;
     bool started;
+    size_t prevMenuSelectedIdx;
+    bool modified;
 
 public:
-    MenuSet() { menuIdx = 0; started = false; }
+    MenuSet() { menuIdx = 0; started = false; prevMenuSelectedIdx = 0; modified = false;}
 
     // メニューが開始しているか
-    bool isStarted() { return started; }
+    bool isStarted() { return this->started; }
+
+    // メニュー実行の結果、値が変更されたものがあるか
+    bool isModified() { return this->modified; }
 
     // メニューの追加
-    void addMenu(Menu *menu) { menuList.push_back(menu); }
+    void addMenu(Menu *menu) { this->menuList.push_back(menu); }
 
     // loopで呼び出すべき関数。メニューが継続する場合、trueを返す
     bool loop();
