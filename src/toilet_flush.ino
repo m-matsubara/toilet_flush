@@ -62,7 +62,6 @@
 // 内蔵赤外線LEDを使用する時定義する
 //#define USE_INTERNAL_IR_LED
 
-
 // 流すコマンド
 #define FLUSH_IR_COMMAND_TYPE decode_type_t::INAX		  // INAX
 #define FLUSH_IR_COMMAND_CODE 0x5C30CF		            // INAX ながす（大）コマンド
@@ -94,6 +93,15 @@ const String CHARACTER_NAME_NONE = "None";
 const String CHARACTER_NAME_MONO_EYE_ORANGE = "Mono-eye(Orange)";
 const String CHARACTER_NAME_MONO_EYE_BLUE = "Mono-eye(Blue)";
 const String CHARACTER_NAME_BOTH_EYES = "Both-eyes";
+
+// ボタン長押しの境界時間
+const uint32_t BUTTON_LONG_PRESS_THRESHOLD = 3000;
+
+// 5分の長さのミリ秒
+const uint32_t FIVE_MIN_MILLIS = 300000;
+// 10分の長さのミリ秒
+const uint32_t TEN_MIN_MILLIS = 600000;
+
 
 // 赤外線LED接続端子
 const uint16_t IR_LED_EXTERNAL = 32; // M5Stack用赤外線送受信ユニット(GROVE互換端子)
@@ -147,7 +155,15 @@ int32_t lcdBrightness = 8;
 uint32_t timeValue = millis();
 
 // ステータス
-enum class Status { Waiting, SitOn, SitOnLong, Countdown, ManualCountdown };
+enum class Status { 
+  Waiting           // 待ち状態
+  , SitOn           // 着座
+  , SitOnLong       // 着座（長時間）
+  , Countdown       // カウントダウン
+  , ManualCountdown // マニュアルカウントダウン
+  , CleaningCountdown5  // 掃除モードカウントダウン(5分)
+  , CleaningCountdown10 // 掃除モードカウントダウン(10分)
+};
 Status status = Status::Waiting;
 // ステータスが変更された時刻
 uint32_t timeChangeStatus = 0;
@@ -159,7 +175,7 @@ boolean sitOnFlg = false;
 uint32_t timeDisplayOn = 0;
 
 // ボタンAを押下した時刻
-uint32_t timeButtonA = 0;
+uint32_t timeButtonAPressed = 0;
 
 // 距離計(ToF HAT)を利用するか
 boolean rangefinderUseFlag = false;
@@ -680,7 +696,7 @@ void loop() {
     distanceToF = distance;
   }
   if (btnA)
-    timeButtonA = timeValue;
+    timeButtonAPressed = timeValue;
 
   // 電源関係取得
   float voltageBat = M5.Axp.GetBatVoltage();
@@ -714,14 +730,18 @@ void loop() {
   
   // ボタン処理
   if (btnA) {
-    // A ボタンが押されたらディスプレイ点灯・トイレフラッシュ・トイレフラッシュキャンセル
+    // A ボタンが押されたらディスプレイ点灯→マニュアルカウントダウン→
     if (displayOnFlag == false) {
       displayOn();
-    } else if (status != Status::Countdown && status != Status::ManualCountdown) {
-      changeStatus(Status::ManualCountdown); // 手動カウントダウン 
-    } else {
+    } else if (status == Status::ManualCountdown) {
+      changeStatus(Status::CleaningCountdown5); // 掃除モードカウントダウン(5分)
+    } else if (status == Status::CleaningCountdown5) {
+      changeStatus(Status::CleaningCountdown10); // 掃除モードカウントダウン(10分)
+    } else if (status == Status::CleaningCountdown10) {
       changeStatus(Status::Waiting); // 強制的に待機モードに変更
       displayOff();
+    } else {
+      changeStatus(Status::ManualCountdown); // 手動カウントダウン 
     }
   }
   if (btnB) {
@@ -745,9 +765,10 @@ void loop() {
   }
 
   // ボタンAの長押し
-  if (M5.BtnA.isPressed() && timeValue - timeButtonA >= 2000) {
+  if (M5.BtnA.isPressed() && (timeValue - timeButtonAPressed >= BUTTON_LONG_PRESS_THRESHOLD)) {
     flush();
     changeStatus(Status::Waiting);
+    timeButtonAPressed = timeValue;
   }
 
   // ステータス判定処理
@@ -770,12 +791,6 @@ void loop() {
     }
     break;
   case Status::Countdown:   // カウントダウン
-#ifdef DEBUG
-    Serial.print("timeValue: ");
-    Serial.print(timeValue);
-    Serial.print(", timeChangeStatus: ");
-    Serial.println(timeChangeStatus);
-#endif
     if (sitOnFlg) {
       changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
     } else if (timeValue - timeChangeStatus >= countdownTimer) {
@@ -784,13 +799,19 @@ void loop() {
     }
     break;
   case Status::ManualCountdown:   // 手動カウントダウン
-#ifdef DEBUG
-    Serial.print("timeValue: ");
-    Serial.print(timeValue);
-    Serial.print(", timeChangeStatus: ");
-    Serial.println(timeChangeStatus);
-#endif
     if (timeValue - timeChangeStatus >= countdownTimer) {
+      flush();
+      changeStatus(Status::Waiting);
+    }
+    break;
+  case Status::CleaningCountdown5:   // 掃除モード手動カウントダウン(5分)
+    if (timeValue - timeChangeStatus >= FIVE_MIN_MILLIS) {
+      flush();
+      changeStatus(Status::Waiting);
+    }
+    break;
+  case Status::CleaningCountdown10:   // 掃除モード手動カウントダウン(10分)
+    if (timeValue - timeChangeStatus >= TEN_MIN_MILLIS) {
       flush();
       changeStatus(Status::Waiting);
     }
@@ -805,10 +826,10 @@ void loop() {
       lcd.print("Welcome.        ");
       break;
     case Status::SitOn:   // 着座確認（長時間着座待ち）
-      lcd.print("Sit on          ");
+      lcd.print("Sit on           ");
       break;
     case Status::SitOnLong:   // 長時間着座(離席待ち)
-      lcd.print("Sit on *        ");
+      lcd.print("Sit on *         ");
       break;
     case Status::Countdown:   // カウントダウン
       lcd.print("Cnt-dwn         ");
@@ -816,14 +837,24 @@ void loop() {
     case Status::ManualCountdown:   // 手動カウントダウン
       lcd.print("Cnt-dwn         ");
       break;
+    case Status::CleaningCountdown5:   // 掃除モード手動カウントダウン(5分)
+      lcd.print("Cleaning        ");
+      break;
+    case Status::CleaningCountdown10:   // 掃除モード手動カウントダウン(10分)
+      lcd.print("Cleaning        ");
+      break;
     }
   
     // カウントダウンタイマー表示
     lcd.setCursor(20, 60, 7);
     if (status == Status::Countdown || status == Status::ManualCountdown) {
-      int secTime = (countdownTimer - (timeValue - timeChangeStatus)) / 1000;
-      if (secTime < 0)
-        secTime = 0;  // タイミングによってはマイナスになってしまうこともある
+      int secTime = (countdownTimer - (timeValue - timeChangeStatus) + 999) / 1000;
+      lcd.printf("%.03d", secTime);
+    } else if (status == Status::CleaningCountdown5) {
+      int secTime = (FIVE_MIN_MILLIS - (timeValue - timeChangeStatus) + 999) / 1000;
+      lcd.printf("%.03d", secTime);
+    } else if (status == Status::CleaningCountdown10) {
+      int secTime = (TEN_MIN_MILLIS - (timeValue - timeChangeStatus) + 999) / 1000;
       lcd.printf("%.03d", secTime);
     } else {
       lcd.print("        ");
@@ -881,8 +912,8 @@ void loop() {
   if (displayOnFlag) {
     delay(10);
   } else {
-    // 500ms 待つ（ボタン操作性ちょっと悪い）
-    delay(500);
+    // 200ms 待つ
+    delay(200);
     //esp_light_sleep_start();  
   }
 }
