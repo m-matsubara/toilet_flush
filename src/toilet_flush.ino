@@ -131,6 +131,8 @@ decode_results results;
 decode_type_t irCommandType = FLUSH_IR_COMMAND_TYPE;
 uint64_t irCommandCode = FLUSH_IR_COMMAND_CODE;
 uint16_t irCommandBits = FLUSH_IR_COMMAND_BITS;
+volatile uint16_t *irCommandBuff = NULL;
+uint16_t irCommandBuffLen = 0;
 
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
@@ -215,10 +217,19 @@ void loadSetting() {
   characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
   lcdBrightness  = pref.getInt("lcdBrightness", 10);
 
-  // 以下３つは赤外線受信モードで設定される項目
+  // 以下は赤外線受信モードで設定される項目
   irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
   irCommandCode    = pref.getInt("irCommandCode", FLUSH_IR_COMMAND_CODE);
   irCommandBits    = pref.getInt("irCommandBits", FLUSH_IR_COMMAND_BITS);
+  irCommandBuffLen = pref.getInt("irCommandBuffLen", 0);
+  if (irCommandBuff != NULL) {
+    delete[] irCommandBuff;
+    irCommandBuff = NULL;
+  }
+  if (irCommandBuffLen != 0) {
+    irCommandBuff = new uint16_t[irCommandBuffLen];
+    pref.getBytes("irCommandBuff", (void *)irCommandBuff, irCommandBuffLen);
+  }
 
   pref.end();
 }
@@ -408,11 +419,17 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  if (irCommandType != decode_type_t::UNKNOWN)
+    irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendExternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
 #endif
   delay(500);
 #ifdef USE_INTERNAL_IR_LED
-  irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  if (irCommandType != decode_type_t::UNKNOWN)
+    irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendInternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
 #endif
 
   // 白い泡が下に流れるイメージのアニメーション
@@ -502,17 +519,52 @@ void irRecvLoop() {
       lcd.printf("type: %s", typeName.c_str());
       lcd.setCursor(5, 100, 2);
       lcd.printf("cmd: %s", commandCodeStr.c_str());
+    } else if (results.decode_type == decode_type_t::UNKNOWN) {
+      // 受信したコマンドを表示(UNKNOWN)
+      Serial.println("IR Unknown Type.");
+      Serial.printf("Len: %d", results.rawlen);
+      for (int n = 0; n < results.rawlen; n++) {
+        if (n == 0)
+          Serial.printf("%d", results.rawbuf[n]);
+        else
+          Serial.printf(",%d", results.rawbuf[n]);
+      }
+      Serial.println();
+
+      lcd.fillRect(0, 60, 135, 80, CL_BLACK);
+      irRecvButtonDraw();
+
+      irCommandType = results.decode_type;
+      irCommandCode = commandCode;
+      irCommandBits = results.bits;
+      if (irCommandBuff != NULL)
+        delete[] irCommandBuff;
+      irCommandBuff = new uint16_t[results.rawlen];
+      memcpy((void *)irCommandBuff, (void *)(results.rawbuf), results.rawlen * sizeof(uint16_t));
+      irCommandBuffLen = results.rawlen;
+
+      // 受信したコマンドを表示
+      lcd.setCursor(5, 60, 2);
+      lcd.printf("type: unknown");
+      lcd.setCursor(5, 100, 2);
+      lcd.printf("cmd len: %d word", results.rawlen);
     }
   }
   if (M5.BtnA.wasPressed()) {
     irrecv.disableIRIn(); // 自身の赤外線コマンドを受信してしまったりするのでいったん無効化
     lcd.fillCircle(115, 220, 5, CL_RED);
 #ifdef USE_EXTERNAL_IR_LED
+  if (irCommandType != decode_type_t::UNKNOWN)
     irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendExternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
 #endif
     delay(500);
 #ifdef USE_INTERNAL_IR_LED
+  if (irCommandType != decode_type_t::UNKNOWN)
     irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendInternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
 #endif
     lcd.fillCircle(115, 220, 5, CL_ORANGE);
     irrecv.enableIRIn();
@@ -523,6 +575,13 @@ void irRecvLoop() {
     pref.putInt("irCommandType", irCommandType);
     pref.putInt("irCommandCode", irCommandCode);
     pref.putInt("irCommandBits", irCommandBits);
+    if (irCommandBuff != NULL) {
+      pref.putBytes("irCommandBuff", (void *)irCommandBuff, irCommandBuffLen * sizeof(uint16_t));
+      pref.putInt("irCommandBuffLen", irCommandBuffLen);
+    } else {
+      pref.remove("irCommandBuff");
+      pref.remove("irCommandBuffLen");
+    }
     pref.end();
     // コマンドの表示を消去
     lcd.fillRect(0, 60, 135, 80, CL_BLACK);
