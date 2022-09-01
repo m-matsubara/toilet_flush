@@ -124,13 +124,13 @@ IRsend irsendInternal(IR_LED_INTERNAL, IR_LED_INTERNAL_INVERTED); // 内蔵赤�
 
 // 赤外線受信クラス
 IRrecv irrecv(IR_SENSOR, 1024, 50, true);	// 引数は、IRrecvDumpV2 を参考にした
-// 赤外線受信結果
-decode_results results;
 
 // 赤外線コマンド
 decode_type_t irCommandType = FLUSH_IR_COMMAND_TYPE;
 uint64_t irCommandCode = FLUSH_IR_COMMAND_CODE;
 uint16_t irCommandBits = FLUSH_IR_COMMAND_BITS;
+uint16_t *irCommandBuff = NULL;
+uint16_t irCommandBuffLen = 0;
 
 // 距離計(ToFセンサー)
 VL53L0X rangefinder;
@@ -215,10 +215,19 @@ void loadSetting() {
   characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
   lcdBrightness  = pref.getInt("lcdBrightness", 10);
 
-  // 以下３つは赤外線受信モードで設定される項目
+  // 以下は赤外線受信モードで設定される項目
   irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
   irCommandCode    = pref.getInt("irCommandCode", FLUSH_IR_COMMAND_CODE);
   irCommandBits    = pref.getInt("irCommandBits", FLUSH_IR_COMMAND_BITS);
+  irCommandBuffLen = pref.getInt("irCommandLen", 0);
+  if (irCommandBuff != NULL) {
+    delete[] irCommandBuff;
+    irCommandBuff = NULL;
+  }
+  if (irCommandBuffLen != 0) {
+    irCommandBuff = new uint16_t[irCommandBuffLen];
+    pref.getBytes("irCommandBuff", (void *)irCommandBuff, irCommandBuffLen * sizeof(uint16_t));
+  }
 
   pref.end();
 }
@@ -408,11 +417,26 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  if (irCommandType != decode_type_t::UNKNOWN)
+    irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  else {
+    irsendExternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
+    Serial.printf("command[%u] = {", irCommandBuffLen);
+    for (int i = 0; i < irCommandBuffLen; i++) {
+      if (i == 0)
+        Serial.printf("%u", irCommandBuff[i]);
+      else
+        Serial.printf(", %u", irCommandBuff[i]);
+    }
+    Serial.println("}");
+  }
 #endif
   delay(500);
 #ifdef USE_INTERNAL_IR_LED
-  irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  if (irCommandType != decode_type_t::UNKNOWN)
+    irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendInternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
 #endif
 
   // 白い泡が下に流れるイメージのアニメーション
@@ -482,37 +506,75 @@ void irRecvSetup() {
 
 // 赤外線コマンド学習モードのループ処理
 void irRecvLoop() {
+  // 赤外線受信結果
+  decode_results results;
   M5.update();
   if (irrecv.decode(&results)) {
     // 受信したコマンドを解析
     String typeName = typeToString(results.decode_type, results.repeat);
     String commandCodeStr = resultToHexidecimal(&results);
     uint64_t commandCode = strtol(commandCodeStr.c_str() , NULL, 16);
-    if ((results.decode_type != decode_type_t::UNKNOWN) && (commandCode != 0)) {
-      // 受信したコマンドを表示(UNKNOWN でなければ)
-      lcd.fillRect(0, 60, 135, 80, CL_BLACK);
-      irRecvButtonDraw();
+    if (results.repeat == false && results.overflow == false) {
+      if (results.decode_type == decode_type_t::UNKNOWN) {
+        // 受信したコマンドを表示(UNKNOWN)
+        lcd.fillRect(0, 60, 135, 80, CL_BLACK);
+        irRecvButtonDraw();
 
-      irCommandType = results.decode_type;
-      irCommandCode = commandCode;
-      irCommandBits = results.bits;
+        irCommandType = results.decode_type;
+        irCommandCode = commandCode;
+        irCommandBits = results.bits;
+        if (irCommandBuff != NULL)
+          delete[] irCommandBuff;
+        irCommandBuff = resultToRawArray(&results);
+        irCommandBuffLen = getCorrectedRawLength(&results);
 
-      // 受信したコマンドを表示
-      lcd.setCursor(5, 60, 2);
-      lcd.printf("type: %s", typeName.c_str());
-      lcd.setCursor(5, 100, 2);
-      lcd.printf("cmd: %s", commandCodeStr.c_str());
+        // 受信したコマンドを表示
+        lcd.setCursor(5, 60, 2);
+        lcd.printf("type: unknown");
+        lcd.setCursor(5, 100, 2);
+        lcd.printf("cmd len: %d word", irCommandBuffLen);
+
+        Serial.printf("command[%u] = {", irCommandBuffLen);
+        for (int i = 0; i < irCommandBuffLen; i++) {
+          if (i == 0)
+            Serial.printf("%u", irCommandBuff[i]);
+          else
+            Serial.printf(", %u", irCommandBuff[i]);
+        }
+        Serial.println("}");
+      } else if (commandCode != 0) {
+        // 受信したコマンドを表示(UNKNOWN でなければ)
+        lcd.fillRect(0, 60, 135, 80, CL_BLACK);
+        irRecvButtonDraw();
+
+        irCommandType = results.decode_type;
+        irCommandCode = commandCode;
+        irCommandBits = results.bits;
+
+        // 受信したコマンドを表示
+        lcd.setCursor(5, 60, 2);
+        lcd.printf("type: %s", typeName.c_str());
+        lcd.setCursor(5, 100, 2);
+        lcd.printf("cmd: %s", commandCodeStr.c_str());
+      }
     }
+    irrecv.resume();
   }
   if (M5.BtnA.wasPressed()) {
     irrecv.disableIRIn(); // 自身の赤外線コマンドを受信してしまったりするのでいったん無効化
     lcd.fillCircle(115, 220, 5, CL_RED);
 #ifdef USE_EXTERNAL_IR_LED
+  if (irCommandType != decode_type_t::UNKNOWN)
     irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendExternal.sendRaw(irCommandBuff, irCommandBuffLen, 38);
 #endif
     delay(500);
 #ifdef USE_INTERNAL_IR_LED
+  if (irCommandType != decode_type_t::UNKNOWN)
     irsendInternal.send(irCommandType, irCommandCode, irCommandBits);
+  else
+    irsendInternal.sendRaw(irCommandBuff, irCommandBuffLen, 38);
 #endif
     lcd.fillCircle(115, 220, 5, CL_ORANGE);
     irrecv.enableIRIn();
@@ -523,6 +585,13 @@ void irRecvLoop() {
     pref.putInt("irCommandType", irCommandType);
     pref.putInt("irCommandCode", irCommandCode);
     pref.putInt("irCommandBits", irCommandBits);
+    if (irCommandBuff != NULL) {
+      pref.putBytes("irCommandBuff", (void *)irCommandBuff, irCommandBuffLen * sizeof(uint16_t));
+      pref.putInt("irCommandLen", irCommandBuffLen);
+    } else {
+      pref.remove("irCommandBuff");
+      pref.remove("irCommandLen");
+    }
     pref.end();
     // コマンドの表示を消去
     lcd.fillRect(0, 60, 135, 80, CL_BLACK);
@@ -538,6 +607,9 @@ void irRecvLoop() {
 void setup() {
   // M5初期化
   M5.begin();
+  Serial.begin(115200, SERIAL_8N1);  
+  Serial.println("toilet_flush v1.0");
+  Serial.println("  Copyright (C) 2002 m.matsubara");
   if (M5.BtnA.isPressed()) {
     // 赤外線コマンド学習モード
     isIRReceiveMode = true;
