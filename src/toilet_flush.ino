@@ -48,7 +48,7 @@
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush v1.0"
+#define APPLICATION_NAME "Toilet flush v1.0.1"
 
 // デバッグの時定義する
 //#define DEBUG
@@ -63,10 +63,16 @@
 //#define USE_INTERNAL_IR_LED
 
 // 流すコマンド
-#define FLUSH_IR_COMMAND_TYPE decode_type_t::INAX		  // INAX
-#define FLUSH_IR_COMMAND_CODE 0x5C30CF		            // INAX ながす（大）コマンド
-//#define FLUSH_IR_COMMAND_CODE 0x5C32CD	            // INAX ながす（小）コマンド
+// INAX (プレアス DT-CL114A・CH184A)
+#define FLUSH_IR_COMMAND_TYPE decode_type_t::INAX
+#define FLUSH_IR_COMMAND_CODE 0x5C30CF		            // ながす（大）コマンド
+//#define FLUSH_IR_COMMAND_CODE 0x5C32CD	            // ながす（小）コマンド
 #define FLUSH_IR_COMMAND_BITS 24
+// TOTO (機種不明)
+//#define FLUSH_IR_COMMAND_TYPE decode_type_t::TOTO
+//#define FLUSH_IR_COMMAND_CODE 0xD0D00		            // T ながす（大）コマンド
+//#define FLUSH_IR_COMMAND_BITS 24
+
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -214,6 +220,11 @@ void loadSetting() {
   countdownTimer = pref.getInt("countdownTimer", COUNTDOWN_TIMER_DEFAULT);
   characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
   lcdBrightness  = pref.getInt("lcdBrightness", 10);
+  Serial.printf("Settings\n");
+  Serial.printf("  sitonThreshold = %d\n", sitonThreshold);
+  Serial.printf("  countdownTimer = %d\n", countdownTimer);
+  Serial.printf("  characterName = %s\n", characterName.c_str());
+  Serial.printf("  lcdBrightness = %d\n", lcdBrightness);
 
   // 以下は赤外線受信モードで設定される項目
   irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
@@ -228,7 +239,20 @@ void loadSetting() {
     irCommandBuff = new uint16_t[irCommandBuffLen];
     pref.getBytes("irCommandBuff", (void *)irCommandBuff, irCommandBuffLen * sizeof(uint16_t));
   }
-
+  Serial.printf("  irCommandType = %d (%s)\n", irCommandType, typeToString(irCommandType).c_str());
+  Serial.printf("  irCommandCode = 0x%x\n", irCommandCode);
+  Serial.printf("  irCommandBits = %d\n", irCommandBits);
+  Serial.printf("  irCommandBuffLen = %d\n", irCommandBuffLen);
+  if (irCommandBuffLen != 0) {
+    Serial.printf("  irCommandBuff[%u] = {", irCommandBuffLen);
+    for (int i = 0; i < irCommandBuffLen; i++) {
+      if (i == 0)
+        Serial.printf("%u", irCommandBuff[i]);
+      else
+        Serial.printf(", %u", irCommandBuff[i]);
+    }
+    Serial.println("}");
+  }
   pref.end();
 }
 
@@ -543,7 +567,6 @@ void irRecvLoop() {
         }
         Serial.println("}");
       } else if (commandCode != 0) {
-        // 受信したコマンドを表示(UNKNOWN でなければ)
         lcd.fillRect(0, 60, 135, 80, CL_BLACK);
         irRecvButtonDraw();
 
@@ -551,7 +574,13 @@ void irRecvLoop() {
         irCommandCode = commandCode;
         irCommandBits = results.bits;
 
-        // 受信したコマンドを表示
+        // UNKNOWNでない場合は、コマンドバッファは削除（保存もしない）
+        if (irCommandBuff != NULL)
+          delete[] irCommandBuff;
+        irCommandBuff = NULL;
+        irCommandBuffLen = 0;
+
+        // 受信したコマンドを表示(UNKNOWN でなければ)
         lcd.setCursor(5, 60, 2);
         lcd.printf("type: %s", typeName.c_str());
         lcd.setCursor(5, 100, 2);
@@ -608,7 +637,7 @@ void setup() {
   // M5初期化
   M5.begin();
   Serial.begin(115200, SERIAL_8N1);  
-  Serial.println("toilet_flush v1.0");
+  Serial.println(APPLICATION_NAME);
   Serial.println("  Copyright (C) 2002 m.matsubara");
   if (M5.BtnA.isPressed()) {
     // 赤外線コマンド学習モード
