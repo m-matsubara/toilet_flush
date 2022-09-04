@@ -81,9 +81,9 @@
 #include <IRsend.h>
 #include <IRrecv.h>
 #include <IRutils.h>
+#include <Preferences.h>
 #include <VL53L0X.h>
 #include <Wire.h>
-#include <Preferences.h>
 #include <nvs_flash.h>
 
 #include "lcd.h"
@@ -161,7 +161,7 @@ int32_t lcdBrightness = 8;
 uint32_t timeValue = millis();
 
 // ステータス
-enum class Status { 
+enum class Status {
   Waiting           // 待ち状態
   , SitOn           // 着座
   , SitOnLong       // 着座（長時間）
@@ -205,6 +205,9 @@ Preferences pref;
 
 // 赤外線コマンド学習モードの時 true
 boolean isIRReceiveMode = false;
+
+// ループごとにインクリメントする
+uint32_t loopCounter = 0;
 
 /**
  * 設定を読み込む
@@ -431,9 +434,9 @@ void displayToggle() {
  * トイレフラッシュ（大）関数(INAX)
  */
 void flush() {
+  setCpuFrequencyMhz(240);  // CPUクロックが低いままだと送信が安定しない
+
   displayOn();
-  // CPU の速度が10Mhzのままだと赤外線が送れない
-  setCpuFrequencyMhz(240);
   lcd.fillScreen(CL_LIGHTGREY);
   lcd.setTextColor(CL_BLUE, CL_LIGHTGREY);
   lcd.setCursor(20, 127, 4);
@@ -478,7 +481,6 @@ void flush() {
     lcd.fillRect(0, y - 11, 135, 2, CL_BLUE);
     delay(2);
   }
-  
   initDisplay();
 
   // CPU速度を戻す
@@ -557,7 +559,6 @@ void irRecvLoop() {
         lcd.printf("type: unknown");
         lcd.setCursor(5, 100, 2);
         lcd.printf("cmd len: %d word", irCommandBuffLen);
-
         Serial.printf("command[%u] = {", irCommandBuffLen);
         for (int i = 0; i < irCommandBuffLen; i++) {
           if (i == 0)
@@ -589,6 +590,7 @@ void irRecvLoop() {
     }
     irrecv.resume();
   }
+
   if (M5.BtnA.wasPressed()) {
     irrecv.disableIRIn(); // 自身の赤外線コマンドを受信してしまったりするのでいったん無効化
     lcd.fillCircle(115, 220, 5, CL_RED);
@@ -630,6 +632,7 @@ void irRecvLoop() {
     lcd.fillScreen(BLACK);
     esp_restart();
   }
+  delay(10);
 }
 
 
@@ -692,8 +695,6 @@ void setup() {
   // 6軸センサ初期化
   M5.Imu.Init();
 
-  changeStatus(Status::Waiting);
-
   // メニュー初期化
   sitonThresholdMenu.addMenuItem("0 s", "0");
   sitonThresholdMenu.addMenuItem("30 s", "30000");
@@ -721,6 +722,8 @@ void setup() {
   lcdBrightnessMenu.addMenuItem("Bright", "12");
   menuSet.addMenu(&lcdBrightnessMenu);
 
+
+  changeStatus(Status::Waiting);
   if (isIRReceiveMode == false) {
     // ディスプレイ初期化
     displayOn();
@@ -736,16 +739,10 @@ void setup() {
   }
 }
 
-void loop() {
-  // 処理時刻の更新
-  timeValue = millis();
-
-  // 赤外線コマンド学習モード
-  if (isIRReceiveMode) {
-    irRecvLoop();
-    return;
-  }
-
+/**
+  * 通常モードのループ
+  */
+void normalLoop() {
   // メニューの処理
   if (menuSet.isStarted()) {
     if (menuSet.loop() == false) {
@@ -1017,4 +1014,16 @@ void loop() {
     delay(200);
     //esp_light_sleep_start();  
   }
+}
+
+
+void loop() {
+  // 処理時刻の更新
+  timeValue = millis();
+
+  if (isIRReceiveMode)
+    irRecvLoop();
+  else
+    normalLoop();
+  loopCounter++;
 }
