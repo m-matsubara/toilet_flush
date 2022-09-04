@@ -17,7 +17,7 @@
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush for ATOM v1.0.1"
+#define APPLICATION_NAME "Toilet flush v1.0.1"
 
 // デバッグの時定義する
 //#define DEBUG
