@@ -1,11 +1,11 @@
 /**
- * Toilet flush (for Lixil)  Copyright © 2022 m.matsubara
+ * Toilet flush  Copyright © 2022 m.matsubara
  * 
  * ## 概要
  *   配管上の問題でトイレ詰まりをよく起こすトイレにおいて、使用後に念入りに流すため、離席後一定時間たったら（離席時に流すが、タンクに水がたまるのを待つ）、再度タイマーでトイレを流す（大）。
  *   
  * ## 対象機材（トイレ）
- * * リモコンで流す動作可能なINAXシャワートイレ (プレアス DT-CL114A・CH184A用リモコンで確認)
+ * * リモコンで流す動作可能なシャワートイレ (INAX プレアス DT-CL114A・CH184A用リモコンで確認)
  *   (リモコンのコマンドが異なる場合、送信コマンドを赤外線センサで解析する必要があります。)
  *
  * ## 必要機材（このプログラムを動作させるのに使用する機材）
@@ -14,41 +14,10 @@
  * * M5StickC ToF Hat（必須ではない。使用した場合は、M5ボタンの代わりに距離センサーで操作可能)
  * * M5StickC PIR Hat（必須ではない。使用した場合は、接近するとディスプレイをONにできる)
  * 
- * ## 必要ライブラリ
- *   M5StickCPlus      0.0.8  : M5Stack
- *   IRremoteESP8266   2.8.2  : David Conran, Mark Szabo, Sebastien Warin, Roi Dayan, Massimiliano Pinto, Christian Nilsson
- *   VL53L0X           1.3.1  : pololu
- *   LovyanGFX         0.4.18 : lovyan03
- *   
- * ## 参考
- *   M5StickC(ESP32)で赤外線リモコンを作ろう
- *   https://qiita.com/coppercele/items/ed91646944ca28ff0c07
- * 
- *   M5StickCで人感センサー (人感センサーは赤外線量の変化を見るので、トイレの着座判定には不向きのため使えない)
- *   https://make-iot.com/2020/12/11/m5stickc%E3%81%A7%E4%BA%BA%E6%84%9F%E3%82%BB%E3%83%B3%E3%82%B5%E3%83%BC/
- * 
- *   M5StickC/examples/Hat/TOF/TOF.ino (距離センサー)
- *   https://github.com/m5stack/M5StickC/blob/master/examples/Hat/TOF/TOF.ino
- *   
- *   M5StickCであそぶ 〜6軸センサを使う〜
- *   https://make-muda.net/2019/09/6932/
- *   
- *   M5Displayクラスの使い方
- *   https://lang-ship.com/reference/unofficial/M5StickC/Tips/M5Display/
- * 
- *   M5StickCでの省電力ノウハウ
- *   https://lang-ship.com/blog/work/m5stickc-power-saving/
- *   
- *   【M5Stack】第二回 LCDの使い方 全集
- *   https://shizenkarasuzon.hatenablog.com/entry/2020/05/21/012555
- *   
- *   LovyanGFX入門 その1 基本描画系
- *   https://lang-ship.com/blog/work/lovyangfx-1/
- *
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush v1.0.1"
+#define APPLICATION_NAME "Toilet flush for ATOM v1.0.1"
 
 // デバッグの時定義する
 //#define DEBUG
@@ -431,7 +400,7 @@ void displayToggle() {
 }
 
 /**
- * トイレフラッシュ（大）関数(INAX)
+ * トイレフラッシュ（大）関数
  */
 void flush() {
   setCpuFrequencyMhz(240);  // CPUクロックが低いままだと送信が安定しない
@@ -489,7 +458,9 @@ void flush() {
   }
 }
 
-// ステータス変更
+/*
+ * ステータス変更
+ */
 void changeStatus(Status newStatus) {
   status = newStatus;
   timeChangeStatus = timeValue;
@@ -497,7 +468,9 @@ void changeStatus(Status newStatus) {
     displayOn();
 }
 
-// 赤外線受信モードでボタン描画
+/*
+ * 赤外線受信モードでボタン描画
+ */
 void irRecvButtonDraw() {
   lcd.fillRoundRect(90, 140, 40, 20, 5, CL_ORANGE);
   lcd.drawLine(120, 150, 135, 125, CL_ORANGE);
@@ -514,7 +487,9 @@ void irRecvButtonDraw() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 }
 
-// 赤外線受信モードの初期化
+/*
+ * 赤外線受信モードの初期化
+ */
 void irRecvSetup() {
   // 赤外線受信のための定数設定(IRrecvDumpV2より取得)
   irrecv.setUnknownThreshold(12); // この値より短いON/OFFの値を無視する閾値
@@ -530,7 +505,9 @@ void irRecvSetup() {
   irRecvButtonDraw();
 }
 
-// 赤外線コマンド学習モードのループ処理
+/**
+  * 赤外線コマンド学習モードのループ処理
+  */
 void irRecvLoop() {
   // 赤外線受信結果
   decode_results results;
@@ -559,6 +536,7 @@ void irRecvLoop() {
         lcd.printf("type: unknown");
         lcd.setCursor(5, 100, 2);
         lcd.printf("cmd len: %d word", irCommandBuffLen);
+
         Serial.printf("command[%u] = {", irCommandBuffLen);
         for (int i = 0; i < irCommandBuffLen; i++) {
           if (i == 0)
