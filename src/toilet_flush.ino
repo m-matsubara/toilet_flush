@@ -17,7 +17,7 @@
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush v1.0.1"
+#define APPLICATION_NAME "Toilet flush v1.1.0"
 
 // デバッグの時定義する
 //#define DEBUG
@@ -32,16 +32,21 @@
 //#define USE_INTERNAL_IR_LED
 
 // 流すコマンド
+// TOTO (機種不明)
+//#define FLUSH_IR_COMMAND_TYPE decode_type_t::TOTO
+//#define FLUSH_IR_COMMAND_CODE 0xD0D00		            // ながす（大）コマンド
+//#define FLUSH_IR_COMMAND_BITS 24
+
 // INAX (プレアス DT-CL114A・CH184A)
 #define FLUSH_IR_COMMAND_TYPE decode_type_t::INAX
 #define FLUSH_IR_COMMAND_CODE 0x5C30CF		            // ながす（大）コマンド
 //#define FLUSH_IR_COMMAND_CODE 0x5C32CD	            // ながす（小）コマンド
 #define FLUSH_IR_COMMAND_BITS 24
-// TOTO (機種不明)
-//#define FLUSH_IR_COMMAND_TYPE decode_type_t::TOTO
-//#define FLUSH_IR_COMMAND_CODE 0xD0D00		            // T ながす（大）コマンド
-//#define FLUSH_IR_COMMAND_BITS 24
 
+// Panasonic (CH 1101 リモコン)
+//#define FLUSH_IR_COMMAND_TYPE decode_type_t::PANASONIC
+//#define FLUSH_IR_COMMAND_CODE 0x344A95A38AF1          // ながす（大）コマンド
+//#define FLUSH_IR_COMMAND_BITS 48
 
 #include <stdlib.h>
 #include <Arduino.h>
@@ -114,6 +119,7 @@ VL53L0X rangefinder;
 MenuSet menuSet;
 Menu sitonThresholdMenu("Sit-on threshold");
 Menu countdownTimerMenu("Countdown Timer");
+Menu countdown2TimerMenu("Countdown2 Timer");
 Menu characterMenu("Character");
 Menu lcdBrightnessMenu("LCD Brightness");
 
@@ -121,6 +127,8 @@ Menu lcdBrightnessMenu("LCD Brightness");
 int32_t sitonThreshold   = SITON_THRESHOLD_DEFAULT;
 // 設定値・カウントダウンタイマー(ms)（離席後時間経過後にトイレフラッシュ）
 int32_t countdownTimer = COUNTDOWN_TIMER_DEFAULT; 
+// 設定値・カウントダウンタイマー2(ms)（離席後時間経過後にトイレフラッシュ）
+int32_t countdown2Timer = 0; 
 // 設定値・キャラクタインデックス
 String characterName = CHARACTER_NAME_MONO_EYE_ORANGE;
 // 設定値・LCD明るさ
@@ -135,6 +143,7 @@ enum class Status {
   , SitOn           // 着座
   , SitOnLong       // 着座（長時間）
   , Countdown       // カウントダウン
+  , Countdown2      // カウントダウン(2回目)
   , ManualCountdown // マニュアルカウントダウン
   , CleaningCountdown5  // 掃除モードカウントダウン(5分)
   , CleaningCountdown10 // 掃除モードカウントダウン(10分)
@@ -188,15 +197,17 @@ void loadSetting() {
   pref.begin("toilet_flush", false);
 
   // メニューにより設定される項目
-  sitonThreshold = pref.getInt("sitonThreshold", SITON_THRESHOLD_DEFAULT);
-  countdownTimer = pref.getInt("countdownTimer", COUNTDOWN_TIMER_DEFAULT);
-  characterName  = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
-  lcdBrightness  = pref.getInt("lcdBrightness", 10);
+  sitonThreshold  = pref.getInt("sitonThreshold", SITON_THRESHOLD_DEFAULT);
+  countdownTimer  = pref.getInt("countdownTimer", COUNTDOWN_TIMER_DEFAULT);
+  countdown2Timer = pref.getInt("countdown2Timer", 0);
+  characterName   = pref.getString("characterName", CHARACTER_NAME_MONO_EYE_ORANGE);
+  lcdBrightness   = pref.getInt("lcdBrightness", 10);
   Serial.printf("Settings\n");
-  Serial.printf("  sitonThreshold = %d\n", sitonThreshold);
-  Serial.printf("  countdownTimer = %d\n", countdownTimer);
-  Serial.printf("  characterName = %s\n", characterName.c_str());
-  Serial.printf("  lcdBrightness = %d\n", lcdBrightness);
+  Serial.printf("  sitonThreshold  = %d\n", sitonThreshold);
+  Serial.printf("  countdownTimer  = %d\n", countdownTimer);
+  Serial.printf("  countdown2Timer = %d\n", countdown2Timer);
+  Serial.printf("  characterName   = %s\n", characterName.c_str());
+  Serial.printf("  lcdBrightness   = %d\n", lcdBrightness);
 
   // 以下は赤外線受信モードで設定される項目
   irCommandType    = (decode_type_t)pref.getInt("irCommandType", FLUSH_IR_COMMAND_TYPE);
@@ -235,6 +246,7 @@ void saveSetting() {
   pref.begin("toilet_flush", false);
   pref.putInt("sitonThreshold", sitonThreshold);
   pref.putInt("countdownTimer", countdownTimer);
+  pref.putInt("countdown2Timer", countdown2Timer);
   pref.putString("characterName", characterName);
   pref.putInt("lcdBrightness",  lcdBrightness);
   pref.end();
@@ -413,9 +425,10 @@ void flush() {
   lcd.setTextColor(CL_WHITE, CL_BLACK);
 
 #ifdef USE_EXTERNAL_IR_LED
-  if (irCommandType != decode_type_t::UNKNOWN)
+  if (irCommandType != decode_type_t::UNKNOWN) {
+    // TODO ir_Panasonic.h の kPanasonicFreq を 367000 → 38000 に変更しないと、Panasonicのトイレは反応しないかも
     irsendExternal.send(irCommandType, irCommandCode, irCommandBits);
-  else {
+  } else {
     irsendExternal.sendRaw((const uint16_t *)irCommandBuff, irCommandBuffLen, 38);
     Serial.printf("command[%u] = {", irCommandBuffLen);
     for (int i = 0; i < irCommandBuffLen; i++) {
@@ -688,6 +701,14 @@ void setup() {
   countdownTimerMenu.addMenuItem("150 s", "150000");
   countdownTimerMenu.addMenuItem("180 s", "180000");
   menuSet.addMenu(&countdownTimerMenu);
+  countdown2TimerMenu.addMenuItem("None", "0");
+  countdown2TimerMenu.addMenuItem("30 s", "30000");
+  countdown2TimerMenu.addMenuItem("60 s", "60000");
+  countdown2TimerMenu.addMenuItem("90 s", "90000");
+  countdown2TimerMenu.addMenuItem("120 s", "120000");
+  countdown2TimerMenu.addMenuItem("150 s", "150000");
+  countdown2TimerMenu.addMenuItem("180 s", "180000");
+  menuSet.addMenu(&countdown2TimerMenu);
   characterMenu.addMenuItem("None",           CHARACTER_NAME_NONE.c_str());
   characterMenu.addMenuItem("Mono-eye",       CHARACTER_NAME_MONO_EYE_ORANGE.c_str());
   characterMenu.addMenuItem("Mono-eye(Blue)", CHARACTER_NAME_MONO_EYE_BLUE.c_str());
@@ -730,6 +751,7 @@ void normalLoop() {
         // なにか変更されていたら、設定値を保存する。（メニュー画面中にリセットすると、設定値は保存されない。）
         sitonThreshold = atoi(sitonThresholdMenu.getValue()); 
         countdownTimer = atoi(countdownTimerMenu.getValue()); 
+        countdown2Timer = atoi(countdown2TimerMenu.getValue()); 
         characterName = characterMenu.getValue(); 
         lcdBrightness  = atoi(lcdBrightnessMenu.getValue()); 
         saveSetting();
@@ -827,6 +849,8 @@ void normalLoop() {
     sitonThresholdMenu.setValue(buff);
     itoa(countdownTimer, buff, 10);
     countdownTimerMenu.setValue(buff);
+    itoa(countdown2Timer, buff, 10);
+    countdown2TimerMenu.setValue(buff);
     characterMenu.setValue(characterName.c_str());
     itoa(lcdBrightness, buff, 10);
     lcdBrightnessMenu.setValue(buff);
@@ -871,6 +895,17 @@ void normalLoop() {
       changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
     } else if (timeValue - timeChangeStatus >= countdownTimer) {
       flush();
+      if (countdown2Timer != 0)
+        changeStatus(Status::Countdown2);
+      else
+        changeStatus(Status::Waiting);
+    }
+    break;
+  case Status::Countdown2:   // カウントダウン(2回目)
+    if (sitOnFlg) {
+      changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
+    } else if (timeValue - timeChangeStatus >= countdown2Timer) {
+      flush();
       changeStatus(Status::Waiting);
     }
     break;
@@ -910,11 +945,14 @@ void normalLoop() {
     case Status::Countdown:   // カウントダウン
       lcd.print("Cnt-dwn         ");
       break;
+    case Status::Countdown2:   // カウントダウン(2回目)
+      lcd.print("Cnt-dwn(2)      ");
+      break;
     case Status::ManualCountdown:   // 手動カウントダウン
-      lcd.print("Cnt-dwn         ");
+      lcd.print("Cnt-dwn(M)      ");
       break;
     case Status::CleaningCountdown5:   // 掃除モード手動カウントダウン(5分)
-      lcd.print("Cleaning        ");
+      lcd.print("Cleaning(C)     ");
       break;
     case Status::CleaningCountdown10:   // 掃除モード手動カウントダウン(10分)
       lcd.print("Cleaning        ");
@@ -925,6 +963,9 @@ void normalLoop() {
     lcd.setCursor(20, 60, 7);
     if (status == Status::Countdown || status == Status::ManualCountdown) {
       int secTime = (countdownTimer - (timeValue - timeChangeStatus) + 999) / 1000;
+      lcd.printf("%.03d", secTime);
+    } else if (status == Status::Countdown2) {
+      int secTime = (countdown2Timer - (timeValue - timeChangeStatus) + 999) / 1000;
       lcd.printf("%.03d", secTime);
     } else if (status == Status::CleaningCountdown5) {
       int secTime = (FIVE_MIN_MILLIS - (timeValue - timeChangeStatus) + 999) / 1000;
