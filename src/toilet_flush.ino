@@ -1,5 +1,5 @@
 /**
- * Toilet flush  Copyright © 2022 m.matsubara
+ * Toilet flush  Copyright © 2022 - 2023 m.matsubara
  * 
  * ## 概要
  *   配管上の問題でトイレ詰まりをよく起こすトイレにおいて、使用後に念入りに流すため、離席後一定時間たったら（離席時に流すが、タンクに水がたまるのを待つ）、再度タイマーでトイレを流す（大）。
@@ -17,7 +17,7 @@
  */
 
 // アプリケーション名
-#define APPLICATION_NAME "Toilet flush v1.1.0"
+#define APPLICATION_NAME "Toilet flush v1.1.1"
 
 // デバッグの時定義する
 //#define DEBUG
@@ -903,7 +903,7 @@ void normalLoop() {
     break;
   case Status::Countdown2:   // カウントダウン(2回目)
     if (sitOnFlg) {
-      changeStatus(Status::SitOnLong); // 着座した(長時間着座(離席待ち)に戻る)
+      changeStatus(Status::SitOn); // 着座した(長時間着座(離席待ち)に戻らないのは既に１回流しているため、再度２回までは流す必要がないと判断できるため)
     } else if (timeValue - timeChangeStatus >= countdown2Timer) {
       flush();
       changeStatus(Status::Waiting);
@@ -946,13 +946,13 @@ void normalLoop() {
       lcd.print("Cnt-dwn         ");
       break;
     case Status::Countdown2:   // カウントダウン(2回目)
-      lcd.print("Cnt-dwn(2)      ");
+      lcd.print("Cnt-dwn2        ");
       break;
     case Status::ManualCountdown:   // 手動カウントダウン
-      lcd.print("Cnt-dwn(M)      ");
+      lcd.print("Cnt-dwn         ");
       break;
     case Status::CleaningCountdown5:   // 掃除モード手動カウントダウン(5分)
-      lcd.print("Cleaning(C)     ");
+      lcd.print("Cleaning        ");
       break;
     case Status::CleaningCountdown10:   // 掃除モード手動カウントダウン(10分)
       lcd.print("Cleaning        ");
